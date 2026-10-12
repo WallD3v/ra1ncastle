@@ -5,6 +5,8 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tree_dir="$root_dir/android/lineage-24.0"
 log_file="$root_dir/logs/android-repo-sync.log"
 lock_file="$root_dir/logs/android-repo-sync.lock"
+network_jobs="${ANDROID_SYNC_NETWORK_JOBS:-12}"
+checkout_jobs="${ANDROID_SYNC_CHECKOUT_JOBS:-4}"
 
 mkdir -p "$root_dir/logs"
 cd "$tree_dir"
@@ -15,7 +17,8 @@ if ! flock -n 9; then
     exit 1
 fi
 
-printf '\n[%s] Resuming Lineage sync: direct network, HTTP/1.1, network=6, checkout=4\n' \
+printf '\n[%s] Resuming Lineage sync: HTTP/1.1, network=%s, checkout=%s, non-interleaved\n' \
+    "$network_jobs" "$checkout_jobs" \
     "$(date --iso-8601=seconds)" >>"$log_file"
 
 set +e
@@ -36,8 +39,9 @@ env \
         --no-tags \
         --optimized-fetch \
         --retry-fetches=8 \
-        --jobs-network=6 \
-        --jobs-checkout=4 \
+        --no-interleaved \
+        --jobs-network="$network_jobs" \
+        --jobs-checkout="$checkout_jobs" \
         "$@" >>"$log_file" 2>&1
 
 status=$?
