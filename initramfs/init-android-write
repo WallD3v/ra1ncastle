@@ -20,9 +20,8 @@ $bb mount -t configfs configfs /sys/kernel/config
 $bb hostname ra1ncastle-android-write
 
 # Keep every block device read-only except the single namespace whose driver
-# consumes the immutable DT allowlist. Its parent must remain writable for the
-# allowed child partitions, but p1 gets a block-layer RO bit as an additional
-# guard. Raw-disk access is still constrained by the driver LBA allowlist.
+# must consume the immutable DT allowlist. No generic userspace write enable is
+# attempted here; the driver enforces the range even for raw-disk I/O.
 (
   wait=0
   while [ "$wait" -lt 120 ]; do
@@ -30,11 +29,6 @@ $bb hostname ra1ncastle-android-write
       [ -e "$ro" ] || continue
       disk="$($bb basename "$($bb dirname "$ro")")"
       [ "$disk" = nvme0n1 ] || echo 1 >"$ro"
-    done
-    [ -e /sys/class/block/nvme0n1p1/ro ] && echo 1 >/sys/class/block/nvme0n1p1/ro
-    for part in p2 p3 p4 p5; do
-      ro="/sys/class/block/nvme0n1${part}/ro"
-      [ -e "$ro" ] && echo 0 >"$ro"
     done
     wait=$((wait + 1))
     $bb sleep 1
