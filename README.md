@@ -111,6 +111,12 @@ The resulting files are `logs/kernel-live-*.txt` and
 `logs/nvme-insmod-*.txt`. The default driver remains hardware-enforced
 read-only even when loaded automatically.
 
+The future Android install payload is deliberately separate from the default
+read-only artifact. It carries a fixed namespace-1/p2-p5 DTB allowlist, a
+distinct USB product string, and requires two explicit storage acknowledgements.
+It must not be used until driver-side fail-closed range enforcement lands; see
+[docs/safety.md](docs/safety.md).
+
 Android work is tracked in
 [docs/android-first-boot-plan.md](docs/android-first-boot-plan.md). The selected
 userspace baseline is Snowcastle `lineage-24.0`; the first target is recovery

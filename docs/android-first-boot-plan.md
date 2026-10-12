@@ -49,6 +49,13 @@ Before any hardware write, the allowlist implementation must reject:
   commands;
 - all writable block devices unless the Android-install profile is selected.
 
+The host-side contract is packaged separately by
+`build-android-write-profile.sh`: it copies the DTB and writes
+`ra1ncastle,write-allow-nsid = <1>` with the one inclusive u64
+`ra1ncastle,write-allow-lba-ranges` pair `14052096..15624993`. `ram-boot.sh`
+re-reads these exact cells and requires both storage acknowledgements. This is
+not enforcement by itself; the driver must consume the contract fail-closed.
+
 ## Build sequence
 
 1. Sync LineageOS 24.0 and the Snowcastle/mainline device dependencies.

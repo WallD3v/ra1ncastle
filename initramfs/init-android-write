@@ -1,0 +1,84 @@
+#!/bin/busybox sh
+
+# Deliberately separate initramfs entrypoint for the opt-in Android-write
+# payload. It differs from init only in leaving nvme0n1's RO bit to the
+# fail-closed driver range policy and identifying itself conspicuously over USB
+# and kmsg. It does not mount or write any internal partition.
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export TERM=vt100
+bb=/bin/busybox
+
+$bb mount -t devtmpfs devtmpfs /dev
+$bb mkdir -p /dev/pts
+$bb mount -t devpts devpts /dev/pts
+$bb mount -t proc proc /proc
+$bb mount -t sysfs sysfs /sys
+$bb mount -t tmpfs tmpfs /run
+$bb mount -t tmpfs tmpfs /tmp
+$bb mount -t configfs configfs /sys/kernel/config
+$bb hostname ra1ncastle-android-write
+
+# Keep every block device read-only except the single namespace whose driver
+# must consume the immutable DT allowlist. No generic userspace write enable is
+# attempted here; if the driver does not opt in, the namespace stays read-only.
+(
+  wait=0
+  while [ "$wait" -lt 120 ]; do
+    for ro in /sys/block/*/ro; do
+      [ -e "$ro" ] || continue
+      disk="$($bb basename "$($bb dirname "$ro")")"
+      [ "$disk" = nvme0n1 ] || echo 1 >"$ro"
+    done
+    wait=$((wait + 1))
+    $bb sleep 1
+  done
+) &
+
+echo 'RA1NCASTLE_ANDROID_WRITE_PROFILE active; no partition is mounted or written by initramfs' >/dev/kmsg
+$bb dmesg >/run/dmesg-boot.txt
+
+setup_usb_gadget() {
+  local gadget=/sys/kernel/config/usb_gadget/ra1ncastle
+  local wait=0 udc=""
+  while [ "$wait" -lt 30 ]; do
+    udc="$($bb basename /sys/class/udc/* 2>/dev/null | $bb head -n 1)"
+    [ -n "$udc" ] && [ "$udc" != '*' ] && break
+    wait=$((wait + 1)); $bb sleep 1
+  done
+  [ -n "$udc" ] && [ "$udc" != '*' ] || return 1
+  $bb mkdir -p "$gadget"
+  echo 0x1d6b >"$gadget/idVendor"; echo 0x1041 >"$gadget/idProduct"
+  echo 0x0100 >"$gadget/bcdDevice"; echo 0x0200 >"$gadget/bcdUSB"
+  $bb mkdir -p "$gadget/strings/0x409"
+  echo n104ap-android-write >"$gadget/strings/0x409/serialnumber"
+  echo ra1ncastle >"$gadget/strings/0x409/manufacturer"
+  echo 'iPhone 11 Linux ANDROID-WRITE profile' >"$gadget/strings/0x409/product"
+  $bb mkdir -p "$gadget/configs/c.1/strings/0x409"
+  echo 'ACM + NCM (ANDROID-WRITE)' >"$gadget/configs/c.1/strings/0x409/configuration"
+  echo 120 >"$gadget/configs/c.1/MaxPower"
+  $bb mkdir -p "$gadget/functions/acm.usb0" "$gadget/functions/ncm.usb0"
+  $bb ln -s "$gadget/functions/acm.usb0" "$gadget/configs/c.1/acm.usb0"
+  $bb ln -s "$gadget/functions/ncm.usb0" "$gadget/configs/c.1/ncm.usb0"
+  echo "$udc" >"$gadget/UDC"
+  netif="$($bb ls /sys/class/net 2>/dev/null | $bb grep -E '^(usb|ncm)' | $bb head -n 1)"
+  if [ -n "$netif" ]; then
+    $bb ip link set "$netif" up
+    $bb ip addr add 172.16.42.1/24 dev "$netif" || true
+    $bb telnetd -p 23 -l /bin/sh
+    $bb tcpsvd -E -c 32 0.0.0.0 2323 $bb timeout -k 2 300 /bin/sh &
+    $bb tcpsvd -E -c 16 0.0.0.0 2324 $bb timeout -k 2 300 /sbin/klog-follow &
+  fi
+  echo "RA1NCASTLE_ANDROID_WRITE_USB bound=$udc" >/dev/kmsg
+}
+setup_usb_gadget || echo 'RA1NCASTLE_ANDROID_WRITE_USB unavailable' >/dev/kmsg
+
+(
+  $bb sleep 2
+  echo RA1NCASTLE_NVME_AUTO_BEGIN >/dev/kmsg
+  $bb insmod /lib/modules/nvme-core.ko; echo "RA1NCASTLE_NVME_AUTO_CORE rc=$?" >/dev/kmsg
+  $bb insmod /lib/modules/nvme-apple.ko; echo "RA1NCASTLE_NVME_AUTO_APPLE rc=$?" >/dev/kmsg
+) &
+($bb setsid $bb cttyhack /bin/sh </dev/console >/dev/console 2>&1) &
+[ -e /dev/ttyGS0 ] && exec $bb setsid $bb cttyhack /bin/sh </dev/ttyGS0 >/dev/ttyGS0 2>&1
+exec /bin/sh </dev/console >/dev/console 2>&1

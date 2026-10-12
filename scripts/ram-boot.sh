@@ -15,6 +15,7 @@ need_cmd lsusb
 need_cmd python3
 need_cmd rg
 need_cmd sudo
+need_cmd fdtget
 
 boot_profile="${RA1NCASTLE_BOOT_PROFILE:-ramonly}"
 case "$boot_profile" in
@@ -34,6 +35,11 @@ case "$boot_profile" in
     require_internal_storage_ack
     payload="$OUT_DIR/payload-storage-probe/m1n1-linux-n104-storage-probe.macho"
     boot_out="$OUT_DIR/bootchain-storage-probe"
+    ;;
+  android-write)
+    require_android_write_ack
+    payload="$OUT_DIR/payload-android-write/m1n1-linux-n104-android-write.macho"
+    boot_out="$OUT_DIR/bootchain-android-write"
     ;;
   *)
     die "unknown RA1NCASTLE_BOOT_PROFILE: $boot_profile"
@@ -85,6 +91,16 @@ if [[ "$boot_profile" == storage-probe ]]; then
   strings "$payload" | rg 'published read-only NVMe LBA0/LBA5 probe' >/dev/null || \
     die 'storage-probe marker is missing from payload'
   printf 'Using read-only m1n1 storage probe; Linux still has Apple NVMe disabled.\n'
+fi
+if [[ "$boot_profile" == android-write ]]; then
+  (
+    cd "$OUT_DIR/payload-android-write"
+    sha256sum --check SHA256SUMS
+  )
+  [[ "$(fdtget -t x "$OUT_DIR/payload-android-write/t8030-n104-android-write.dtb" /soc/nvme@27acc0000 ra1ncastle,write-allow-nsid)" == "$(printf '%x' "$ANDROID_WRITE_NSID")" ]] || die 'Android-write DTB has an invalid write namespace'
+  expected_ranges="$(printf '0 %x 0 %x' "$ANDROID_WRITE_LBA_START" "$ANDROID_WRITE_LBA_END")"
+  [[ "$(fdtget -t x "$OUT_DIR/payload-android-write/t8030-n104-android-write.dtb" /soc/nvme@27acc0000 ra1ncastle,write-allow-lba-ranges)" == "$expected_ranges" ]] || die 'Android-write DTB has an invalid immutable LBA allowlist'
+  printf 'Using separate Android-write payload: NSID %s, only LBAs %s..%s may be write-enabled by the driver.\n' "$ANDROID_WRITE_NSID" "$ANDROID_WRITE_LBA_START" "$ANDROID_WRITE_LBA_END"
 fi
 
 # Create the two volatile-upload containers on the host. Neither operation

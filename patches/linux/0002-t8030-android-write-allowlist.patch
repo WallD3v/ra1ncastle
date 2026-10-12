@@ -1,0 +1,225 @@
+diff --git a/drivers/nvme/host/nvme.h b/drivers/nvme/host/nvme.h
+index 21216eb..4493f6c 100644
+--- a/drivers/nvme/host/nvme.h
++++ b/drivers/nvme/host/nvme.h
+@@ -640,6 +640,7 @@ struct nvme_ctrl_ops {
+ #define NVME_F_METADATA_SUPPORTED	(1 << 1)
+ #define NVME_F_BLOCKING			(1 << 2)
+ #define NVME_F_FORCE_READ_ONLY		(1 << 3)
++#define NVME_F_NO_USER_ADMIN_PASSTHRU	(1 << 4)
+ 
+ 	const struct attribute_group **dev_attr_groups;
+ 	int (*reg_read32)(struct nvme_ctrl *ctrl, u32 off, u32 *val);
+diff --git a/drivers/nvme/host/ioctl.c b/drivers/nvme/host/ioctl.c
+index 664216e..5c997f8 100644
+--- a/drivers/nvme/host/ioctl.c
++++ b/drivers/nvme/host/ioctl.c
+@@ -549,6 +549,9 @@ static bool is_ctrl_ioctl(unsigned int cmd)
+ static int nvme_ctrl_ioctl(struct nvme_ctrl *ctrl, unsigned int cmd,
+ 		void __user *argp, bool open_for_write)
+ {
++	if (ctrl->ops->flags & NVME_F_NO_USER_ADMIN_PASSTHRU)
++		return -EPERM;
++
+ 	switch (cmd) {
+ 	case NVME_IOCTL_ADMIN_CMD:
+ 		return nvme_user_cmd(ctrl, NULL, argp, 0, open_for_write);
+@@ -791,9 +794,13 @@ int nvme_dev_uring_cmd(struct io_uring_cmd *ioucmd, unsigned int issue_flags)
+ 
+ 	switch (ioucmd->cmd_op) {
+ 	case NVME_URING_CMD_ADMIN:
++		if (ctrl->ops->flags & NVME_F_NO_USER_ADMIN_PASSTHRU)
++			return -EPERM;
+ 		ret = nvme_uring_cmd_io(ctrl, NULL, ioucmd, issue_flags, false);
+ 		break;
+ 	case NVME_URING_CMD_ADMIN_VEC:
++		if (ctrl->ops->flags & NVME_F_NO_USER_ADMIN_PASSTHRU)
++			return -EPERM;
+ 		ret = nvme_uring_cmd_io(ctrl, NULL, ioucmd, issue_flags, true);
+ 		break;
+ 	default:
+diff --git a/drivers/nvme/host/apple.c b/drivers/nvme/host/apple.c
+index 739d969..2a0348d 100644
+--- a/drivers/nvme/host/apple.c
++++ b/drivers/nvme/host/apple.c
+@@ -37,6 +37,7 @@
+ #include "nvme.h"
+ 
+ #define APPLE_ANS_BOOT_TIMEOUT	  USEC_PER_SEC
++#define APPLE_NVME_MAX_WRITE_RANGES 4
+ 
+ #define APPLE_ANS_COPROC_CPU_CONTROL	 0x44
+ #define APPLE_ANS_COPROC_CPU_CONTROL_RUN BIT(4)
+@@ -196,6 +197,11 @@ struct apple_nvme_sart_mapping {
+ 	size_t size;
+ };
+ 
++struct apple_nvme_lba_range {
++	u64 first;
++	u64 last;
++};
++
+ struct apple_nvme {
+ 	struct device *dev;
+ 
+@@ -223,6 +229,10 @@ struct apple_nvme {
+ 	struct apple_nvme_queue adminq;
+ 	struct apple_nvme_queue ioq;
+ 
++	u32 write_allow_nsid;
++	u32 write_allow_nranges;
++	struct apple_nvme_lba_range write_allow_ranges[APPLE_NVME_MAX_WRITE_RANGES];
++
+ 	struct blk_mq_tag_set admin_tagset;
+ 	struct blk_mq_tag_set tagset;
+ 
+@@ -980,6 +990,44 @@ static int apple_nvme_remove_sq(struct apple_nvme *anv)
+ 	return nvme_submit_sync_cmd(anv->ctrl.admin_q, &c, NULL, 0);
+ }
+ 
++static bool apple_nvme_write_allowed(struct apple_nvme *anv,
++				     struct nvme_ns *ns,
++				     const struct nvme_rw_command *rw)
++{
++	u64 first = le64_to_cpu(rw->slba);
++	u64 last = first + le16_to_cpu(rw->length);
++	u32 i;
++
++	if (ns->head->ns_id != anv->write_allow_nsid || last < first)
++		return false;
++
++	for (i = 0; i < anv->write_allow_nranges; i++) {
++		const struct apple_nvme_lba_range *range =
++			&anv->write_allow_ranges[i];
++
++		if (first >= range->first && last <= range->last)
++			return true;
++	}
++
++	return false;
++}
++
++static bool apple_nvme_io_allowed(struct apple_nvme *anv,
++				  struct nvme_ns *ns,
++				  const struct nvme_command *cmd)
++{
++	switch (cmd->common.opcode) {
++	case nvme_cmd_read:
++		return true;
++	case nvme_cmd_write:
++		return apple_nvme_write_allowed(anv, ns, &cmd->rw);
++	case nvme_cmd_flush:
++		return ns->head->ns_id == anv->write_allow_nsid;
++	default:
++		return false;
++	}
++}
++
+ static blk_status_t apple_nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
+ 					const struct blk_mq_queue_data *bd)
+ {
+@@ -1010,11 +1058,16 @@ static blk_status_t apple_nvme_queue_rq(struct blk_mq_hw_ctx *hctx,
+ 	ret = nvme_setup_cmd(ns, req);
+ 	if (ret)
+ 		return ret;
+-	if (anv->hw->read_only && !q->is_adminq &&
++	if (anv->hw->read_only && !anv->write_allow_nranges && !q->is_adminq &&
+ 	    cmnd->common.opcode != nvme_cmd_read) {
+ 		nvme_cleanup_cmd(req);
+ 		return BLK_STS_NOTSUPP;
+ 	}
++	if (anv->write_allow_nranges && !q->is_adminq &&
++	    !apple_nvme_io_allowed(anv, ns, cmnd)) {
++		nvme_cleanup_cmd(req);
++		return BLK_STS_NOTSUPP;
++	}
+ 
+ 	if (blk_rq_nr_phys_segments(req)) {
+ 		ret = apple_nvme_map_data(anv, req, cmnd);
+@@ -1563,6 +1616,18 @@ static const struct nvme_ctrl_ops nvme_ctrl_ops_read_only = {
+ 	.get_virt_boundary = nvme_get_virt_boundary,
+ };
+ 
++static const struct nvme_ctrl_ops nvme_ctrl_ops_write_allowlist = {
++	.name = "apple-nvme-write-allowlist",
++	.module = THIS_MODULE,
++	.flags = NVME_F_NO_USER_ADMIN_PASSTHRU,
++	.reg_read32 = apple_nvme_reg_read32,
++	.reg_write32 = apple_nvme_reg_write32,
++	.reg_read64 = apple_nvme_reg_read64,
++	.free_ctrl = apple_nvme_free_ctrl,
++	.get_address = apple_nvme_get_address,
++	.get_virt_boundary = nvme_get_virt_boundary,
++};
++
+ static void apple_nvme_async_probe(void *data, async_cookie_t cookie)
+ {
+ 	struct apple_nvme *anv = data;
+@@ -1763,6 +1828,45 @@ static void devm_apple_nvme_mempool_destroy(void *data)
+ 	mempool_destroy(data);
+ }
+ 
++static int apple_nvme_parse_write_allowlist(struct apple_nvme *anv)
++{
++	struct device_node *np = anv->dev->of_node;
++	u64 ranges[APPLE_NVME_MAX_WRITE_RANGES * 2];
++	int nranges, i, ret;
++
++	nranges = of_property_count_elems_of_size(np,
++			"ra1ncastle,write-allow-lba-ranges", sizeof(u64));
++	if (nranges == -EINVAL &&
++	    !of_find_property(np, "ra1ncastle,write-allow-nsid", NULL))
++		return 0;
++	if (nranges < 0 || !nranges || nranges % 2 ||
++	    nranges > ARRAY_SIZE(ranges))
++		return dev_err_probe(anv->dev, -EINVAL,
++			"invalid ra1ncastle write allowlist ranges\n");
++
++	ret = of_property_read_u32(np, "ra1ncastle,write-allow-nsid",
++				   &anv->write_allow_nsid);
++	if (ret || !anv->write_allow_nsid)
++		return dev_err_probe(anv->dev, -EINVAL,
++			"invalid ra1ncastle write allowlist namespace\n");
++
++	ret = of_property_read_u64_array(np,
++		"ra1ncastle,write-allow-lba-ranges", ranges, nranges);
++	if (ret)
++		return dev_err_probe(anv->dev, ret,
++			"failed to read ra1ncastle write allowlist\n");
++
++	for (i = 0; i < nranges / 2; i++) {
++		if (ranges[i * 2] > ranges[i * 2 + 1])
++			return dev_err_probe(anv->dev, -EINVAL,
++				"invalid ra1ncastle write LBA range\n");
++		anv->write_allow_ranges[i].first = ranges[i * 2];
++		anv->write_allow_ranges[i].last = ranges[i * 2 + 1];
++	}
++	anv->write_allow_nranges = nranges / 2;
++	return 0;
++}
++
+ static struct apple_nvme *apple_nvme_alloc(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -1783,6 +1887,10 @@ static struct apple_nvme *apple_nvme_alloc(struct platform_device *pdev)
+ 		goto put_dev;
+ 	}
+ 
++	ret = apple_nvme_parse_write_allowlist(anv);
++	if (ret)
++		goto put_dev;
++
+ 	ret = apple_nvme_attach_genpd(anv);
+ 	if (ret < 0) {
+ 		dev_err_probe(dev, ret, "Failed to attach power domains");
+@@ -1899,7 +2007,9 @@ static struct apple_nvme *apple_nvme_alloc(struct platform_device *pdev)
+ 	}
+ 
+ 	ret = nvme_init_ctrl(&anv->ctrl, anv->dev,
+-			     anv->hw->read_only ? &nvme_ctrl_ops_read_only :
++			     anv->hw->read_only && !anv->write_allow_nranges ?
++						  &nvme_ctrl_ops_read_only :
++			     anv->write_allow_nranges ? &nvme_ctrl_ops_write_allowlist :
+ 						  &nvme_ctrl_ops,
+ 			     NVME_QUIRK_SKIP_CID_GEN | NVME_QUIRK_IDENTIFY_CNS);
+ 	if (ret) {

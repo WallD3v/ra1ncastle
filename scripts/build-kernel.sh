@@ -15,12 +15,14 @@ require_ram_only_ack
 cd "$PROJECT_ROOT"
 src_repo="$PROJECT_ROOT/sources/linux"
 linux_patch="$PROJECT_ROOT/patches/linux/0001-t8030-read-only-nvme-bringup.patch"
+android_write_patch="$PROJECT_ROOT/patches/linux/0002-t8030-android-write-allowlist.patch"
 src="${RA1NCASTLE_LINUX_WORKTREE:-/tmp/ra1ncastle-linux-t8030-$(id -u)}"
 docs="$PROJECT_ROOT/sources/hoolock-docs-a13"
 obj="$BUILD_DIR/linux-n104"
 assert_pinned_checkout "$src_repo" "$LINUX_REV"
 assert_pinned_checkout "$docs" "$HOOLOCK_DOCS_REV"
 [[ -s "$linux_patch" ]] || die "missing T8030 Linux patch: $linux_patch"
+[[ -s "$android_write_patch" ]] || die "missing Android-write allowlist patch: $android_write_patch"
 [[ ! -e "$src" ]] || die "temporary Linux worktree already exists: $src"
 
 need_cmd make
@@ -36,6 +38,7 @@ trap cleanup EXIT INT TERM
 
 git -C "$src_repo" worktree add --detach "$src" "$LINUX_REV"
 git -C "$src" apply "$linux_patch"
+git -C "$src" apply "$android_write_patch"
 git -C "$src" diff --check
 
 mkdir -p "$obj" "$OUT_DIR/kernel"

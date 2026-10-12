@@ -41,3 +41,34 @@ guarded by the driver and initramfs read-only controls.
 
 The storage probe is discovery only. It does not authorize APFS writes, GPT
 changes, filesystem creation, partition resizing, or flashing.
+
+## Separate Android-write profile
+
+`scripts/build-android-write-profile.sh` creates a distinct artifact below
+`out/payload-android-write`; it never alters the default read-only payload.
+Its copied DTB carries this immutable contract on `/soc/nvme@27acc0000`:
+
+- `ra1ncastle,write-allow-nsid = <1>`;
+- `ra1ncastle,write-allow-lba-ranges = <0 14052096 0 15624993>`.
+
+The latter is a single inclusive u64 start/end pair encoded as four FDT cells,
+covering only contiguous Android p2-p5. It excludes GPT, APFS, all unallocated
+LBAs, and every other namespace. The matching driver must fail closed if these
+properties are missing/malformed or an I/O crosses the range; an FDT property
+alone does not enforce writes.
+
+The profile packages a dedicated initramfs. It leaves only `nvme0n1` for the
+driver policy and continues marking all other block devices read-only. It does
+not mount or write any partition, has no mass-storage gadget, uses USB product
+ID `1d6b:1041`, and emits `RA1NCASTLE_ANDROID_WRITE_PROFILE` in kmsg.
+
+It requires `I_ACCEPT_RAM_ONLY=YES`, `I_ACCEPT_INTERNAL_STORAGE_RISK=YES`, and
+`I_ACCEPT_ANDROID_WRITE_PROFILE=YES` both to build and boot:
+
+```bash
+./scripts/build-android-write-profile.sh
+RA1NCASTLE_BOOT_PROFILE=android-write ./scripts/ram-boot.sh
+```
+
+Do not use it on hardware until the driver-side fail-closed range enforcement
+and boundary tests are present.

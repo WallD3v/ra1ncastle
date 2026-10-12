@@ -96,3 +96,26 @@ expected_size="$((m1n1_size + prefix_size + bootargs_size + dtb_size + kernel_si
   die "payload size mismatch: got $payload_size, expected $expected_size"
 
 printf 'Verified read-only-storage n104 payload: %s bytes\n' "$payload_size"
+
+# The write profile is intentionally optional and separate. Verify it whenever
+# present so a malformed DT contract can never reach ram-boot.
+android_write_dir="$OUT_DIR/payload-android-write"
+if [[ -d "$android_write_dir" ]]; then
+  need_cmd fdtget
+  for artifact in \
+    "$android_write_dir/SHA256SUMS" \
+    "$android_write_dir/m1n1-linux-n104-android-write.macho" \
+    "$android_write_dir/t8030-n104-android-write.dtb" \
+    "$android_write_dir/initramfs-android-write.cpio.gz" \
+    "$android_write_dir/bootargs.txt" "$android_write_dir/PROFILE"
+  do
+    [[ -s "$artifact" ]] || die "incomplete Android-write profile artifact: $artifact"
+  done
+  (cd "$android_write_dir" && sha256sum --check SHA256SUMS)
+  [[ "$(fdtget -t x "$android_write_dir/t8030-n104-android-write.dtb" /soc/nvme@27acc0000 ra1ncastle,write-allow-nsid)" == "$(printf '%x' "$ANDROID_WRITE_NSID")" ]] || die 'Android-write profile has an invalid namespace property'
+  expected_write_ranges="$(printf '0 %x 0 %x' "$ANDROID_WRITE_LBA_START" "$ANDROID_WRITE_LBA_END")"
+  [[ "$(fdtget -t x "$android_write_dir/t8030-n104-android-write.dtb" /soc/nvme@27acc0000 ra1ncastle,write-allow-lba-ranges)" == "$expected_write_ranges" ]] || die 'Android-write profile has an invalid LBA range property'
+  grep -qx 'profile=android-write' "$android_write_dir/PROFILE" || die 'Android-write profile manifest is invalid'
+  gzip -t "$android_write_dir/initramfs-android-write.cpio.gz"
+  printf 'Verified separate Android-write allowlist: NSID %s, LBAs %s..%s\n' "$ANDROID_WRITE_NSID" "$ANDROID_WRITE_LBA_START" "$ANDROID_WRITE_LBA_END"
+fi

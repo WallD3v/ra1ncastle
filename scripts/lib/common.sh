@@ -61,6 +61,19 @@ require_internal_storage_ack() {
     die "set I_ACCEPT_INTERNAL_STORAGE_RISK=YES only after accepting the internal-storage recovery and data-loss risk"
 }
 
+require_android_write_ack() {
+  require_internal_storage_ack
+  [[ "${I_ACCEPT_ANDROID_WRITE_PROFILE:-NO}" == YES ]] || \
+    die "set I_ACCEPT_ANDROID_WRITE_PROFILE=YES only after reviewing the android-write profile in docs/safety.md"
+}
+
+# Immutable n104 Android write contract: inclusive 4 KiB LBAs from the GPT
+# captured in docs/apfs-partition-plan.md. These values are copied into the
+# android-write FDT and independently re-checked before USB upload.
+ANDROID_WRITE_NSID=1
+ANDROID_WRITE_LBA_START=14052096
+ANDROID_WRITE_LBA_END=15624993
+
 jobs() {
   getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1\n'
 }
