@@ -10,8 +10,8 @@ need_cmd udevadm
 
 is_ra1ncastle_device() {
   local properties="$1"
-  grep -qx 'ID_VENDOR_ID=1d6b' <<<"$properties" &&
-    grep -qx 'ID_MODEL_ID=1040' <<<"$properties"
+  grep -qx 'ID_VENDOR_ID=1d6b' <<<"$properties" || return 1
+  grep -Eq '^ID_MODEL_ID=104(0|1)$' <<<"$properties"
 }
 
 find_ncm_interface() {
@@ -52,7 +52,7 @@ case "${1:---ncm}" in
       sleep 1
     done
     [[ -n "$iface" ]] || \
-      die "ra1ncastle NCM interface (USB 1d6b:1040) not found after 30 seconds"
+      die "ra1ncastle NCM interface (USB 1d6b:1040 or 1d6b:1041) not found after 30 seconds"
 
     printf 'Configuring iPhone NCM interface %s.\n' "$iface"
     sudo ip link set "$iface" up
@@ -106,7 +106,7 @@ except (BrokenPipeError, KeyboardInterrupt):
       sleep 1
     done
     [[ -n "$tty" ]] || \
-      die "ra1ncastle ACM device (USB 1d6b:1040) not found after 30 seconds"
+      die "ra1ncastle ACM device (USB 1d6b:1040 or 1d6b:1041) not found after 30 seconds"
     printf 'Opening %s. Exit picocom with Ctrl-A Ctrl-X.\n' "$tty"
     exec picocom --baud 115200 "$tty"
     ;;
