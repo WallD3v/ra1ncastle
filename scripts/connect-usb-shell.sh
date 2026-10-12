@@ -66,18 +66,15 @@ case "${1:---ncm}" in
     grep -q "dev $iface" <<<"$route" || \
       die "192.0.2.1 is not routed through $iface"
 
-    if command -v nc >/dev/null 2>&1; then
-      printf 'Opening raw shell at 192.0.2.1:2323 (there may be no prompt).\n'
-      exec nc -v 192.0.2.1 2323
-    elif command -v socat >/dev/null 2>&1; then
-      printf 'Opening raw shell at 192.0.2.1:2323 with socat.\n'
-      exec socat -,rawer,echo=0 TCP:192.0.2.1:2323
-    elif command -v python3 >/dev/null 2>&1; then
-      printf 'Opening raw shell at 192.0.2.1:2323 with Python fallback.\n'
-      exec python3 -c '
+    if command -v python3 >/dev/null 2>&1; then
+      printf 'Opening NCM-bound raw shell at 192.0.2.1:2323.\n'
+      exec sudo python3 -c '
 import socket, sys, threading
 
-sock = socket.create_connection(("192.0.2.1", 2323))
+iface = sys.argv[1].encode() + b"\0"
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, iface)
+sock.connect(("192.0.2.1", 2323))
 
 def receive():
     try:
@@ -93,7 +90,13 @@ try:
         sock.sendall(data)
 except (BrokenPipeError, KeyboardInterrupt):
     pass
-'
+' "$iface"
+    elif command -v nc >/dev/null 2>&1; then
+      printf 'Opening raw shell at 192.0.2.1:2323 (routing may be affected by VPNs).\n'
+      exec nc -v 192.0.2.1 2323
+    elif command -v socat >/dev/null 2>&1; then
+      printf 'Opening raw shell at 192.0.2.1:2323 with socat (routing may be affected by VPNs).\n'
+      exec socat -,rawer,echo=0 TCP:192.0.2.1:2323
     else
       die "install netcat-openbsd, socat, or Python 3"
     fi
