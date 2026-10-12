@@ -7,7 +7,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/common.sh"
 require_ram_only_ack
 
-need_cmd dtc
+dtc_bin="${DTC:-dtc}"
+if ! command -v "$dtc_bin" >/dev/null 2>&1; then
+  # A completed kernel build already has a native host dtc.  This keeps
+  # artifact verification usable when the distro package was later removed;
+  # fresh build hosts still get device-tree-compiler via install-deps-ubuntu.sh.
+  bundled_dtc="$BUILD_DIR/linux-n104/scripts/dtc/dtc"
+  [[ -x "$bundled_dtc" ]] || die "missing command: dtc (and no built kernel dtc)"
+  dtc_bin="$bundled_dtc"
+fi
 need_cmd file
 need_cmd gzip
 need_cmd sha256sum
@@ -67,7 +75,7 @@ done
 
 dt_dump="$(mktemp)"
 trap 'rm -f "$dt_dump"' EXIT
-dtc -I dtb -O dts "$OUT_DIR/kernel/t8030-n104.dtb" >"$dt_dump" 2>/dev/null
+"$dtc_bin" -I dtb -O dts "$OUT_DIR/kernel/t8030-n104.dtb" >"$dt_dump" 2>/dev/null
 rg -q 'compatible = "apple,n104", "apple,t8030"' "$dt_dump"
 rg -q 'model = "Apple iPhone 11"' "$dt_dump"
 rg -q 'compatible = "apple,simple-framebuffer", "simple-framebuffer"' "$dt_dump"
