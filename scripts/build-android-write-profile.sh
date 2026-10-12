@@ -29,6 +29,13 @@ for artifact in "$m1n1" "$dtb" "$kernel" "$bootargs_file" "$stage/bin/busybox"; 
   [[ -s "$artifact" ]] || die "missing artifact: $artifact"
 done
 
+# Do not package a writable-looking DTB around the old read-only transport.
+# The marker is emitted only by patches/linux/0002 after the allowlist and
+# user-admin-passthrough gates have been compiled into nvme-apple.ko.
+module_strings="$(strings "$OUT_DIR/kernel/nvme-apple.ko")"
+[[ "$module_strings" == *$'\napple-nvme-write-allowlist\n'* ]] || \
+  die 'nvme-apple.ko lacks the Android-write allowlist; rebuild the kernel first'
+
 start_hi=$((ANDROID_WRITE_LBA_START >> 32)); start_lo=$((ANDROID_WRITE_LBA_START & 0xffffffff))
 end_hi=$((ANDROID_WRITE_LBA_END >> 32)); end_lo=$((ANDROID_WRITE_LBA_END & 0xffffffff))
 expected_ranges="$(printf '%x %x %x %x' "$start_hi" "$start_lo" "$end_hi" "$end_lo")"
@@ -38,7 +45,7 @@ mkdir -p "$profile_out"
 cp "$dtb" "$profile_dtb"
 fdtput -t x "$profile_dtb" "$nvme_node" ra1ncastle,write-allow-nsid "$ANDROID_WRITE_NSID"
 fdtput -t x "$profile_dtb" "$nvme_node" ra1ncastle,write-allow-lba-ranges \
-  "$start_hi" "$start_lo" "$end_hi" "$end_lo"
+  $expected_ranges
 [[ "$(fdtget -t x "$profile_dtb" "$nvme_node" ra1ncastle,write-allow-nsid)" == "$(printf '%x' "$ANDROID_WRITE_NSID")" ]] || die 'failed to set Android-write NSID'
 [[ "$(fdtget -t x "$profile_dtb" "$nvme_node" ra1ncastle,write-allow-lba-ranges)" == "$expected_ranges" ]] || die 'failed to set Android-write LBA range'
 
