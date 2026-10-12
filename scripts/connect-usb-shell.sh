@@ -58,6 +58,9 @@ case "${1:---ncm}" in
     sudo ip link set "$iface" up
     sudo ip addr replace 172.16.42.2/24 dev "$iface"
     sudo ip route replace 172.16.42.0/24 dev "$iface" src 172.16.42.2
+    # A host route beats VPNs that later install their own 172.16.42.0/24
+    # route, keeping the iPhone shell from being redirected into a tunnel.
+    sudo ip route replace 172.16.42.1/32 dev "$iface" src 172.16.42.2
 
     route="$(ip route get 172.16.42.1)"
     printf 'Route: %s\n' "$route"
