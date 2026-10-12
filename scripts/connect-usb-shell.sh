@@ -70,8 +70,30 @@ case "${1:---ncm}" in
     elif command -v socat >/dev/null 2>&1; then
       printf 'Opening raw shell at 172.16.42.1:2323 with socat.\n'
       exec socat -,rawer,echo=0 TCP:172.16.42.1:2323
+    elif command -v python3 >/dev/null 2>&1; then
+      printf 'Opening raw shell at 172.16.42.1:2323 with Python fallback.\n'
+      exec python3 -c '
+import socket, sys, threading
+
+sock = socket.create_connection(("172.16.42.1", 2323))
+
+def receive():
+    try:
+        while data := sock.recv(4096):
+            sys.stdout.buffer.write(data)
+            sys.stdout.buffer.flush()
+    finally:
+        sock.close()
+
+threading.Thread(target=receive, daemon=True).start()
+try:
+    while data := sys.stdin.buffer.read1(4096):
+        sock.sendall(data)
+except (BrokenPipeError, KeyboardInterrupt):
+    pass
+'
     else
-      die "install netcat-openbsd or socat"
+      die "install netcat-openbsd, socat, or Python 3"
     fi
     ;;
   --acm)
