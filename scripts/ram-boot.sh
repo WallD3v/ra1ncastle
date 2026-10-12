@@ -50,6 +50,7 @@ restore_dt="$SOURCES_DIR/remote_boot/cache/RestoreDeviceTree_n104ap_iPhone12,1.i
 empty_tc="$SOURCES_DIR/remote_boot/empty_trustcache.bin"
 im4m="$SOURCES_DIR/remote_boot/im4m/0x8015.im4m"
 usbliter8ctl="$SOURCES_DIR/usbliter8/usbliter8ctl"
+pyusb_dir="${PYUSB_DIR:-$BUILD_DIR/host-tools/pyusb}"
 ipsw_bin="${IPSW:-$OUT_DIR/host-tools/ipsw}"
 restore_tc="$boot_out/RestoreTrustCache_n104ap_iPhone12,1.img4"
 restore_rkrn="$boot_out/RestoreKernelCache_n104ap_iPhone12,1.img4"
@@ -60,6 +61,7 @@ for artifact in \
 do
   [[ -s "$artifact" ]] || die "missing boot artifact: $artifact; run scripts/prepare-bootchain.sh"
 done
+[[ -d "$pyusb_dir/usb" ]] || die "missing PyUSB source: $pyusb_dir; clone PyUSB there or set PYUSB_DIR"
 
 "$PROJECT_ROOT/scripts/verify-artifacts.sh"
 if [[ "$boot_profile" == nvme-disabled ]]; then
@@ -151,7 +153,8 @@ if printf '%s\n' "$current" | rg -qi '^MODE:[[:space:]]*DFU'; then
   # already caused a successful USB disconnect. Recovery enumeration below,
   # rather than that final libusb status, is the authoritative success test.
   set +e
-  sudo python3 "$usbliter8ctl" boot "$raw_iboot"
+  sudo env "PYTHONPATH=$pyusb_dir${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 "$usbliter8ctl" boot "$raw_iboot"
   raw_status="$?"
   set -e
   printf 'usbliter8ctl exit status: %s (ENODEV after CUSTOM_BOOT is expected)\n' "$raw_status"
