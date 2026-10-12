@@ -18,8 +18,7 @@ if ! flock -n 9; then
 fi
 
 printf '\n[%s] Resuming Lineage sync: HTTP/1.1, network=%s, checkout=%s, non-interleaved\n' \
-    "$network_jobs" "$checkout_jobs" \
-    "$(date --iso-8601=seconds)" >>"$log_file"
+    "$(date --iso-8601=seconds)" "$network_jobs" "$checkout_jobs" >>"$log_file"
 
 set +e
 env \
