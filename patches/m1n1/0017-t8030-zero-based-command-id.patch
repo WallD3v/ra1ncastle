@@ -1,0 +1,29 @@
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -260,8 +260,15 @@
+ 
+     memcpy(queue_cmd, cmd, sizeof(*cmd));
+ 
+-    queue_cmd->tag = ++(q->sq_tail);
+-    cid = queue_cmd->tag;
++    if (nvme_has_coastguard) {
++        /* A13 uses the SQ slot as its zero-based NVMe command identifier. */
++        queue_cmd->tag = tag;
++        cid = tag;
++        q->sq_tail++;
++    } else {
++        queue_cmd->tag = ++(q->sq_tail);
++        cid = queue_cmd->tag;
++    }
+     if (q->sq_tail == nvme_queue_size)
+         q->sq_tail = 0;
+ 
+@@ -285,7 +292,7 @@
+     else
+         write32(nvme_base + NVME_DB_IOSQ, q->sq_tail);
+ 
+-    return (tag + 1);
++    return nvme_has_coastguard ? tag : (tag + 1);
+ }
+ 
+ /*

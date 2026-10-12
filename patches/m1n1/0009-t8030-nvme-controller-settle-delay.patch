@@ -1,0 +1,15 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 112bc67..f127aa8 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -510,6 +510,10 @@ bool nvme_init(void)
+         goto out_disable_ctrl;
+     }
+ 
++    nvme_init_stage = "controller-settle-delay";
++    printf("nvme: waiting 200 ms for T8030 controller to settle\n");
++    udelay(200000);
++
+     /* setup IO queue */
+     struct nvme_command cmd;
+     nvme_init_stage = "create-completion-queue";

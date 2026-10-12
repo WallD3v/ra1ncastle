@@ -1,0 +1,8 @@
+#!/bin/busybox sh
+
+# This BusyBox release has no `dmesg -w`.  Publish one complete snapshot first,
+# then follow the kernel-native /dev/kmsg stream.  Running it behind its own TCP
+# service keeps logging independent of the shell which invokes the potentially
+# blocking experimental NVMe module.
+/bin/busybox dmesg
+exec /bin/busybox cat /dev/kmsg

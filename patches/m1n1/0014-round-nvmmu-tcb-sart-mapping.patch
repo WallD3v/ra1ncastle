@@ -1,0 +1,18 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 37aae9c..606150e 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -530,11 +530,9 @@ bool nvme_init(void)
+                read32(nvme_base + NVMMU_TCB_STAT));
+         nvme_init_stage = "sart-map-admin-tcb";
+-        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs,
+-                                     nvme_queue_size * sizeof(*adminq.tcbs)))
++        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs, SZ_4K))
+             goto out_shutdown;
+         nvme_init_stage = "sart-map-io-tcb";
+-        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs,
+-                                     nvme_queue_size * sizeof(*ioq.tcbs)))
++        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs, SZ_4K))
+             goto out_shutdown;
+     }
+ 

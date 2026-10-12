@@ -1,0 +1,141 @@
+#!/bin/busybox sh
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export TERM=vt100
+
+bb=/bin/busybox
+
+$bb mount -t devtmpfs devtmpfs /dev
+$bb mkdir -p /dev/pts
+$bb mount -t devpts devpts /dev/pts
+$bb mount -t proc proc /proc
+$bb mount -t sysfs sysfs /sys
+$bb mount -t tmpfs tmpfs /run
+$bb mount -t tmpfs tmpfs /tmp
+$bb mount -t configfs configfs /sys/kernel/config
+
+$bb hostname ra1ncastle
+
+# Defense in depth: the T8030 driver rejects non-read I/O, and this watcher
+# also marks every block device read-only as soon as it appears.
+(
+  wait=0
+  while [ "$wait" -lt 120 ]; do
+    for ro in /sys/block/*/ro; do
+      [ -e "$ro" ] && echo 1 >"$ro"
+    done
+    wait=$((wait + 1))
+    $bb sleep 1
+  done
+) &
+
+echo "ra1ncastle: RAM initramfs started; internal block I/O is read-only" >/dev/kmsg
+$bb dmesg >/run/dmesg-boot.txt
+
+setup_usb_gadget() {
+  local gadget=/sys/kernel/config/usb_gadget/ra1ncastle
+  local wait=0
+  local udc=""
+
+  while [ "$wait" -lt 30 ]; do
+    udc="$($bb basename /sys/class/udc/* 2>/dev/null | $bb head -n 1)"
+    [ -n "$udc" ] && [ "$udc" != '*' ] && break
+    wait=$((wait + 1))
+    $bb sleep 1
+  done
+
+  if [ -z "$udc" ] || [ "$udc" = '*' ]; then
+    echo "ra1ncastle: no UDC appeared; USB shell unavailable" >/dev/kmsg
+    return 1
+  fi
+
+  $bb mkdir -p "$gadget"
+  echo 0x1d6b >"$gadget/idVendor"
+  echo 0x1040 >"$gadget/idProduct"
+  echo 0x0100 >"$gadget/bcdDevice"
+  echo 0x0200 >"$gadget/bcdUSB"
+
+  $bb mkdir -p "$gadget/strings/0x409"
+  echo n104ap-storage-ro >"$gadget/strings/0x409/serialnumber"
+  echo ra1ncastle >"$gadget/strings/0x409/manufacturer"
+  echo "iPhone 11 Linux read-only storage shell" >"$gadget/strings/0x409/product"
+
+  $bb mkdir -p "$gadget/configs/c.1/strings/0x409"
+  echo "ACM + NCM" >"$gadget/configs/c.1/strings/0x409/configuration"
+  echo 120 >"$gadget/configs/c.1/MaxPower"
+
+  $bb mkdir -p "$gadget/functions/acm.usb0"
+  $bb mkdir -p "$gadget/functions/ncm.usb0"
+  $bb ln -s "$gadget/functions/acm.usb0" "$gadget/configs/c.1/acm.usb0"
+  $bb ln -s "$gadget/functions/ncm.usb0" "$gadget/configs/c.1/ncm.usb0"
+  echo "$udc" >"$gadget/UDC"
+
+  wait=0
+  while [ "$wait" -lt 15 ] && [ ! -e /dev/ttyGS0 ]; do
+    wait=$((wait + 1))
+    $bb sleep 1
+  done
+
+  netif="$($bb ls /sys/class/net 2>/dev/null | $bb grep -E '^(usb|ncm)' | $bb head -n 1)"
+  if [ -n "$netif" ]; then
+    $bb ip link set "$netif" up
+    $bb ip addr add 172.16.42.1/24 dev "$netif" || true
+    $bb telnetd -p 23 -l /bin/sh
+    # tcpsvd keeps the listeners alive independently of individual clients.
+    # This matters when a host-side capture is interrupted while its remote
+    # shell is still waiting in a driver probe: a plain nc -l loop otherwise
+    # remains occupied and eventually makes the diagnostic port unreachable.
+    $bb tcpsvd -E -c 32 0.0.0.0 2323 $bb timeout -k 2 300 /bin/sh &
+    # A separate, PTY-free kernel log stream remains usable while an NVMe
+    # insmod on port 2323 is blocked inside the experimental probe routine.
+    $bb tcpsvd -E -c 16 0.0.0.0 2324 $bb timeout -k 2 300 /sbin/klog-follow &
+  fi
+
+  echo "ra1ncastle: USB gadget bound to $udc" >/dev/kmsg
+}
+
+setup_usb_gadget || true
+
+# Bring up the internal controller automatically and publish a machine-readable
+# read-only validation to kmsg.  This removes the diagnostic shell from the
+# critical path and mirrors how the eventual Android ramdisk will load storage.
+(
+  $bb sleep 2
+  echo "RA1NCASTLE_NVME_AUTO_BEGIN" >/dev/kmsg
+  $bb insmod /lib/modules/nvme-core.ko
+  core_rc=$?
+  echo "RA1NCASTLE_NVME_AUTO_CORE rc=$core_rc" >/dev/kmsg
+  $bb insmod /lib/modules/nvme-apple.ko
+  apple_rc=$?
+  echo "RA1NCASTLE_NVME_AUTO_APPLE rc=$apple_rc" >/dev/kmsg
+
+  wait=0
+  while [ "$wait" -lt 60 ] && [ ! -e /sys/block/nvme0n1/ro ]; do
+    wait=$((wait + 1))
+    $bb sleep 1
+  done
+
+  if [ -e /sys/block/nvme0n1/ro ]; then
+    for disk in /sys/block/nvme*; do
+      [ -e "$disk/ro" ] || continue
+      echo "RA1NCASTLE_NVME_DISK name=$($bb basename "$disk") ro=$($bb cat "$disk/ro") size=$($bb cat "$disk/size") logical=$($bb cat "$disk/queue/logical_block_size")" >/dev/kmsg
+    done
+    while IFS= read -r line; do
+      echo "RA1NCASTLE_PARTITIONS $line" >/dev/kmsg
+    done </proc/partitions
+    echo "RA1NCASTLE_NVME_AUTO_READY" >/dev/kmsg
+  else
+    echo "RA1NCASTLE_NVME_AUTO_MISSING" >/dev/kmsg
+  fi
+) &
+
+# Keep a rescue shell on the inherited console as well.
+($bb setsid $bb cttyhack /bin/sh </dev/console >/dev/console 2>&1) &
+
+if [ -e /dev/ttyGS0 ]; then
+  exec $bb setsid $bb cttyhack /bin/sh </dev/ttyGS0 >/dev/ttyGS0 2>&1
+fi
+
+echo "ra1ncastle: falling back to /dev/console" >/dev/kmsg
+exec /bin/sh </dev/console >/dev/console 2>&1

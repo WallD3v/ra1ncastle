@@ -1,0 +1,42 @@
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -19,6 +19,8 @@
+ 
+ #define NVME_CC            0x14
+ #define NVME_CC_SHN        GENMASK(15, 14)
++#define NVME_CC_IOSQES     GENMASK(19, 16)
++#define NVME_CC_IOCQES     GENMASK(23, 20)
+ #define NVME_CC_SHN_NONE   0
+ #define NVME_CC_SHN_NORMAL 1
+ #define NVME_CC_SHN_ABRUPT 2
+@@ -156,7 +158,7 @@
+ static bool alloc_queue(struct nvme_queue *q, bool adminq)
+ {
+     size_t cmdq_size;
+-    if (adminq || nvme_type == NVME_TYPE_T8103)
++    if (adminq || nvme_type == NVME_TYPE_T8103 || nvme_has_coastguard)
+         cmdq_size = nvme_queue_size * sizeof(*q->cmds);
+     else
+         cmdq_size = nvme_queue_size * NVME_IOSQES_128;
+@@ -254,7 +256,7 @@
+     u8 cid;
+     struct nvme_command *queue_cmd;
+ 
+-    if (q->adminq)
++    if (q->adminq || nvme_has_coastguard)
+         queue_cmd = &q->cmds[tag];
+     else
+         queue_cmd = (void *)q->cmds + (tag * NVME_IOSQES_128);
+@@ -605,8 +607,10 @@
+     }
+     if (nvme_has_coastguard) {
+         write32(nvme_base + NVME_MODESEL, 0);
+-        printf("nvme: CoastGuard MODESEL=0x%x after controller disable\n",
+-               read32(nvme_base + NVME_MODESEL));
++        mask32(nvme_base + NVME_CC, NVME_CC_IOSQES | NVME_CC_IOCQES,
++               FIELD_PREP(NVME_CC_IOSQES, 6) | FIELD_PREP(NVME_CC_IOCQES, 4));
++        printf("nvme: CoastGuard MODESEL=0x%x CC=0x%x with 64-byte IOSQEs\n",
++               read32(nvme_base + NVME_MODESEL), read32(nvme_base + NVME_CC));
+     }
+     if (reuse_iboot_adminq) {
+         memset(adminq.cmds, 0, nvme_queue_size * sizeof(*adminq.cmds));

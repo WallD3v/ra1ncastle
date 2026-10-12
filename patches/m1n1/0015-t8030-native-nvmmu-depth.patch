@@ -1,0 +1,45 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 606150e..11f6e19 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -418,10 +418,10 @@ bool nvme_init(void)
+     if (chip_id == T8030) {
+         /*
+          * A13 uses the ascwrap-v2 compatible shared with T8020. Probe its
+-         * linear submission queue and NVMMU TCB command path while keeping
+-         * the conservative 16-entry queue depth used by iBoot.
++         * linear submission queue and NVMMU TCB command path. The inherited
++         * NVMMU_NUM value is 0x3f, matching the native 64-entry layout.
+          */
+         nvme_type = NVME_TYPE_T8103;
+-        nvme_queue_size = NVME_QUEUE_SIZE_T8015;
++        nvme_queue_size = NVME_QUEUE_SIZE_T8103;
+         printf("nvme: T8030 selecting linear-SQ/NVMMU mode with depth %u\n",
+                nvme_queue_size);
+@@ -531,8 +531,8 @@ bool nvme_init(void)
+                read32(nvme_base + NVMMU_TCB_STAT));
+         nvme_init_stage = "sart-map-admin-tcb";
+-        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs, SZ_4K))
++        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs, 2 * SZ_4K))
+             goto out_shutdown;
+         nvme_init_stage = "sart-map-io-tcb";
+-        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs, SZ_4K))
++        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs, 2 * SZ_4K))
+             goto out_shutdown;
+     }
+@@ -557,8 +557,14 @@ bool nvme_init(void)
+         set32(nvme_base + NVME_LINEAR_SQ_CTRL, NVME_LINEAR_SQ_CTRL_EN);
+         clear32(nvme_base + NVME_UNKNOWN_CTRL, NVME_UNKNOWN_CTRL_PRP_NULL_CHECK);
+         write32(nvme_base + NVME_MAX_PEND_CMDS_CTRL,
+-                ((nvme_queue_size - 1) << 16) | (nvme_queue_size - 1));
++                (nvme_queue_size << 16) | nvme_queue_size);
+         write32(nvme_base + NVMMU_NUM, nvme_queue_size - 1);
+         write64_lo_hi(nvme_base + NVMMU_ASQ_BASE, (u64)adminq.tcbs);
+         write64_lo_hi(nvme_base + NVMMU_IOSQ_BASE, (u64)ioq.tcbs);
++        printf("nvme: NVMMU configured LSQ=0x%x MAXP=0x%x NUM=0x%x"
++               " ASQ-TCB=0x%lx IOSQ-TCB=0x%lx STAT=0x%x\n",
++               read32(nvme_base + NVME_LINEAR_SQ_CTRL),
++               read32(nvme_base + NVME_MAX_PEND_CMDS_CTRL), read32(nvme_base + NVMMU_NUM),
++               read64(nvme_base + NVMMU_ASQ_BASE), read64(nvme_base + NVMMU_IOSQ_BASE),
++               read32(nvme_base + NVMMU_TCB_STAT));
+     }

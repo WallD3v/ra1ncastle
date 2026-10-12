@@ -1,0 +1,43 @@
+# Storage safety boundaries
+
+## Read-only kernel storage bring-up profile
+
+This milestone uploads executable images over DFU/Recovery and runs its root
+filesystem from RAM. It may enumerate internal NVMe, but must not write the
+iPhone's NAND, APFS container, GPT, NVRAM or boot environment.
+
+Enforced controls:
+
+- the kernel is built with `CONFIG_NVME_APPLE=y`, using a T8030-specific path
+  that rejects every non-read namespace command;
+- the initramfs exposes no USB mass-storage function;
+- the initramfs continuously marks every visible block device read-only;
+- the boot wrapper uses only `usbliter8ctl boot`, `irecovery -f`,
+  `devicetree`, `firmware`, and `bootx`;
+- the default boot profile contains no mount, filesystem creation,
+  partitioning, or flashing operation;
+- source revisions are pinned and checked before the USB boot step.
+
+Do not run the storage tutorials from Hoolock documentation. In particular, do
+not run `resize_apfs`, `gdisk`, `dd`, filesystem creation, `saveenv`, or an IPSW
+restore as part of this milestone.
+
+The phone still needs a forced reboot/DFU cycle if an experimental handoff
+hangs. A backup remains required as a risk-control measure even though this
+project does not intentionally access storage.
+
+## Read-only m1n1 storage-probe profile
+
+The separately selected `storage-probe` profile uses patched m1n1 code that
+exports a read function and no write function, to capture only LBA 0 through
+LBA 5. This covers the protective MBR, primary GPT header, and the initial partition-entry
+array. m1n1 then shuts the ANS controller down before Linux starts and publishes
+the 24 KiB snapshot as `/chosen/ra1ncastle,nvme-lba0-lba5` in the Linux FDT.
+
+The profile is opt-in with `RA1NCASTLE_BOOT_PROFILE=storage-probe`, requires
+`I_ACCEPT_INTERNAL_STORAGE_RISK=YES`, and is packaged separately from the
+main payload. It does not mount APFS; the kernel-side block device remains
+guarded by the driver and initramfs read-only controls.
+
+The storage probe is discovery only. It does not authorize APFS writes, GPT
+changes, filesystem creation, partition resizing, or flashing.

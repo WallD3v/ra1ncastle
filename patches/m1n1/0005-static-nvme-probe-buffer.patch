@@ -1,0 +1,26 @@
+diff --git a/src/kboot.c b/src/kboot.c
+index 527d579..41d10dc 100644
+--- a/src/kboot.c
++++ b/src/kboot.c
+@@ -2858,6 +2858,6 @@ static int dt_set_ra1ncastle_storage_probe(void)
+     int chosen;
+     size_t i;
+-    u8 *probe;
++    static u8 probe[SZ_4K * 6] __attribute__((aligned(SZ_4K)));
+     int ret = -1;
+ 
+     chosen = fdt_path_offset(dt, "/chosen");
+@@ -2867,7 +2867,4 @@ static int dt_set_ra1ncastle_storage_probe(void)
+     fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "starting");
+ 
+-    probe = memalign(SZ_4K, block_size * block_count);
+-    if (!probe)
+-        return -1;
+     memset(probe, 0, block_size * block_count);
+ 
+@@ -2901,5 +2898,4 @@ out_shutdown:
+     nvme_shutdown();
+ out:
+-    free(probe);
+     return ret;
+ }

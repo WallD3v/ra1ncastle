@@ -1,0 +1,91 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 06a6408..4c8f6ae 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -115,6 +115,8 @@ struct nvme_queue {
+     struct apple_nvmmu_tcb *tcbs;
+     struct nvme_command *cmds;
+     struct nvme_completion *cqes;
++    struct nvme_command *owned_cmds;
++    struct nvme_completion *owned_cqes;
+ 
+     u8 cq_head;
+     u8 cq_phase;
+@@ -166,6 +168,9 @@ static bool alloc_queue(struct nvme_queue *q, bool adminq)
+     if (!q->cqes)
+         goto free_cmds;
+ 
++    q->owned_cmds = q->cmds;
++    q->owned_cqes = q->cqes;
++
+     if (nvme_type == NVME_TYPE_T8103) {
+         q->tcbs = memalign(SZ_16K, nvme_queue_size * sizeof(*q->tcbs));
+         if (!q->tcbs)
+@@ -190,9 +195,9 @@ free_cmds:
+ 
+ static void free_queue(struct nvme_queue *q)
+ {
+-    free(q->cmds);
++    free(q->owned_cmds);
+     free(q->tcbs);
+-    free(q->cqes);
++    free(q->owned_cqes);
+ }
+ 
+ static void nvme_poll_syslog(void)
+@@ -475,6 +480,24 @@ bool nvme_init(void)
+         goto out_shutdown;
+     }
+ 
++    /*
++     * T8030 ANS2 rejects command fetches from otherwise SART-visible normal
++     * RAM.  Preserve the queue aperture selected by iBoot and reuse it only
++     * when it is large enough for m1n1's admin queue.  This changes RAM only;
++     * the storage probe still issues IDENTIFY and READ commands exclusively.
++     */
++    u64 iboot_asq = read64(nvme_base + NVME_ASQ);
++    u64 iboot_acq = read64(nvme_base + NVME_ACQ);
++    u32 iboot_aqa = read32(nvme_base + NVME_AQA);
++    u32 iboot_asqs = (iboot_aqa & 0xfff) + 1;
++    u32 iboot_acqs = ((iboot_aqa >> 16) & 0xfff) + 1;
++    bool reuse_iboot_adminq = iboot_asq && iboot_acq && !(iboot_asq & (SZ_4K - 1)) &&
++                              !(iboot_acq & (SZ_4K - 1)) && iboot_asqs >= nvme_queue_size &&
++                              iboot_acqs >= nvme_queue_size;
++
++    printf("nvme: inherited iBoot AQA=0x%x ASQ=0x%lx ACQ=0x%lx depths=%u/%u reuse=%u\n",
++           iboot_aqa, iboot_asq, iboot_acq, iboot_asqs, iboot_acqs, reuse_iboot_adminq);
++
+     printf("nvme: queue DMA ASQ=%p ACQ=%p IOSQ=%p IOCQ=%p\n", adminq.cmds, adminq.cqes,
+            ioq.cmds, ioq.cqes);
+     nvme_init_stage = "sart-map-admin-sq";
+@@ -490,6 +513,15 @@ bool nvme_init(void)
+     if (!sart_add_allowed_region(nvme_sart, ioq.cqes, SZ_4K))
+         goto out_shutdown;
+ 
++    if (reuse_iboot_adminq) {
++        adminq.cmds = (void *)iboot_asq;
++        adminq.cqes = (void *)iboot_acq;
++        printf("nvme: reusing iBoot admin queue aperture ASQ=%p ACQ=%p\n", adminq.cmds,
++               adminq.cqes);
++    } else {
++        printf("nvme: inherited iBoot admin queues are unusable; retaining allocated queues\n");
++    }
++
+     if (nvme_type == NVME_TYPE_T8103) {
+         /* setup controller and NVMMU for linear submission queue */
+         set32(nvme_base + NVME_LINEAR_SQ_CTRL, NVME_LINEAR_SQ_CTRL_EN);
+@@ -507,6 +539,14 @@ bool nvme_init(void)
+         printf("nvme: timeout while waiting for CSTS.RDY to clear\n");
+         goto out_shutdown;
+     }
++    if (reuse_iboot_adminq) {
++        memset(adminq.cmds, 0, nvme_queue_size * sizeof(*adminq.cmds));
++        memset(adminq.cqes, 0, nvme_queue_size * sizeof(*adminq.cqes));
++        adminq.cq_head = 0;
++        adminq.cq_phase = 1;
++        adminq.sq_tail = 0;
++        dma_wmb();
++    }
+     write64_lo_hi(nvme_base + NVME_ASQ, (u64)adminq.cmds);
+     write64_lo_hi(nvme_base + NVME_ACQ, (u64)adminq.cqes);
+     write32(nvme_base + NVME_AQA, ((nvme_queue_size - 1) << 16) | (nvme_queue_size - 1));

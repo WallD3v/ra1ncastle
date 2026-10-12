@@ -1,0 +1,12 @@
+diff --git a/src/sart.c b/src/sart.c
+index b3f1e1b..a4f7d13 100644
+--- a/src/sart.c
++++ b/src/sart.c
+@@ -197,6 +197,7 @@ sart_dev_t *sart_init(const char *adt_path)
+ 
+     switch (*sart_version) {
+         case 0:
++        case 1: /* ADT SART1 uses the T8020/SARTv0 register layout. */
+             sart->get_entry = sart0_get_entry;
+             sart->set_entry = sart0_set_entry;
+             sart->flags_allow = APPLE_SART0_FLAGS_ALLOW;

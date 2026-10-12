@@ -1,0 +1,19 @@
+diff --git a/src/sart.c b/src/sart.c
+index 2cc79fa..b3f1e1b 100644
+--- a/src/sart.c
++++ b/src/sart.c
+@@ -57,4 +57,5 @@ struct sart_dev {
+ 
+ static const char *sart_init_stage = "sart:not-started";
++static char sart_init_error[48];
+ 
+ const char *sart_get_init_stage(void)
+@@ -211,5 +212,8 @@ sart_dev_t *sart_init(const char *adt_path)
+             break;
+         default:
+             printf("sart: SART %s has unknown version %d\n", adt_path, *sart_version);
++            snprintf(sart_init_error, sizeof(sart_init_error), "sart:unknown-version:%u",
++                     *sart_version);
++            sart_init_stage = sart_init_error;
+             free(sart);
+             return NULL;

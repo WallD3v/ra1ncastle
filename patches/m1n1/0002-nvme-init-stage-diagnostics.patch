@@ -1,0 +1,140 @@
+diff --git a/src/kboot.c b/src/kboot.c
+index cd8cb16..527d579 100644
+--- a/src/kboot.c
++++ b/src/kboot.c
+@@ -2877,6 +2877,8 @@ static int dt_set_ra1ncastle_storage_probe(void)
+     if (!nvme_init()) {
+         printf("ra1ncastle: read-only NVMe probe initialization failed\n");
+         fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "init-failed");
++        fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-error",
++                           nvme_get_init_stage());
+         goto out;
+     }
+ 
+diff --git a/src/nvme.c b/src/nvme.c
+index 0966023..4a02631 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -140,6 +140,13 @@ static u8 nvme_queue_size;
+ 
+ static struct nvme_queue adminq, ioq;
+ 
++static const char *nvme_init_stage = "not-started";
++
++const char *nvme_get_init_stage(void)
++{
++    return nvme_init_stage;
++}
++
+ static bool alloc_queue(struct nvme_queue *q, bool adminq)
+ {
+     size_t cmdq_size;
+@@ -365,6 +372,7 @@ static bool nvme_exec_command(struct nvme_queue *q, struct nvme_command *cmd, voi
+ 
+ bool nvme_init(void)
+ {
++    nvme_init_stage = "already-initialized";
+     if (nvme_initialized) {
+         printf("nvme: already initialized\n");
+         return true;
+@@ -372,11 +380,13 @@ bool nvme_init(void)
+ 
+     int adt_path[8];
++    nvme_init_stage = "adt-node";
+     int node = adt_path_offset_trace(adt, "/arm-io/ans", adt_path);
+     if (node < 0) {
+         printf("nvme: Error getting NVMe node /arm-io/ans\n");
+         return NULL;
+     }
+ 
++    nvme_init_stage = "nvme-reg";
+     if (adt_get_reg(adt, adt_path, "reg", 3, &nvme_base, NULL) < 0) {
+         printf("nvme: Error getting NVMe base address.\n");
+         return NULL;
+@@ -401,10 +411,12 @@ bool nvme_init(void)
+     }
+     printf("nvme: ANS is on die %d\n", nvme_die);
+ 
++    nvme_init_stage = "alloc-admin-queue";
+     if (!alloc_queue(&adminq, true)) {
+         printf("nvme: Error allocating admin queue\n");
+         return NULL;
+     }
++    nvme_init_stage = "alloc-io-queue";
+     if (!alloc_queue(&ioq, false)) {
+         printf("nvme: Error allocating admin queue\n");
+         goto out_adminq;
+@@ -412,19 +424,24 @@ bool nvme_init(void)
+ 
++    nvme_init_stage = "asc-init";
+     nvme_asc = asc_init("/arm-io/ans");
+     if (!nvme_asc)
+         goto out_ioq;
+ 
++    nvme_init_stage = "sart-init";
+     nvme_sart = sart_init("/arm-io/sart-ans");
+     if (!nvme_sart)
+         goto out_asc;
+ 
++    nvme_init_stage = "rtkit-init";
+     nvme_rtkit = rtkit_init("nvme", nvme_asc, NULL, NULL, nvme_sart, false);
+     if (!nvme_rtkit)
+         goto out_sart;
+ 
++    nvme_init_stage = "rtkit-boot";
+     if (!rtkit_boot(nvme_rtkit))
+         goto out_rtkit;
+ 
++    nvme_init_stage = "ans-boot-status";
+     if (poll32(nvme_base + NVME_BOOT_STATUS, 0xffffffff, NVME_BOOT_STATUS_OK, USEC_PER_SEC) < 0) {
+         printf("nvme: ANS did not boot correctly.\n");
+         goto out_shutdown;
+@@ -452,6 +471,7 @@ bool nvme_init(void)
+     }
+ 
+     /* setup admin queue */
++    nvme_init_stage = "controller-disable";
+     if (!nvme_ctrl_disable()) {
+         printf("nvme: timeout while waiting for CSTS.RDY to clear\n");
+         goto out_shutdown;
+@@ -460,5 +480,6 @@ bool nvme_init(void)
+     write64_lo_hi(nvme_base + NVME_ACQ, (u64)adminq.cqes);
+     write32(nvme_base + NVME_AQA, ((nvme_queue_size - 1) << 16) | (nvme_queue_size - 1));
++    nvme_init_stage = "controller-enable";
+     if (!nvme_ctrl_enable()) {
+         printf("nvme: timeout while waiting for CSTS.RDY to be set\n");
+         goto out_disable_ctrl;
+@@ -467,6 +488,7 @@ bool nvme_init(void)
+ 
+     /* setup IO queue */
+     struct nvme_command cmd;
++    nvme_init_stage = "create-completion-queue";
+ 
+     memset(&cmd, 0, sizeof(cmd));
+     cmd.opcode = NVME_ADMIN_CMD_CREATE_CQ;
+@@ -480,5 +502,6 @@ bool nvme_init(void)
+         goto out_disable_ctrl;
+     }
+ 
++    nvme_init_stage = "create-submission-queue";
+     memset(&cmd, 0, sizeof(cmd));
+     cmd.opcode = NVME_ADMIN_CMD_CREATE_SQ;
+@@ -494,5 +517,6 @@ bool nvme_init(void)
+     }
+ 
+     nvme_initialized = true;
++    nvme_init_stage = "ok";
+     printf("nvme: initialized at 0x%lx\n", nvme_base);
+     return true;
+diff --git a/src/nvme.h b/src/nvme.h
+index 80e3865..00f5d48 100644
+--- a/src/nvme.h
++++ b/src/nvme.h
+@@ -6,6 +6,7 @@
+ #include "types.h"
+ 
+ bool nvme_init(void);
++const char *nvme_get_init_stage(void);
+ void nvme_shutdown(void);
+ 
+ bool nvme_flush(u32 nsid);

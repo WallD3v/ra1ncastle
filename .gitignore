@@ -1,0 +1,16 @@
+# Local machine profile; it contains acknowledgements and host/device details.
+config/local.env
+
+# Reproducibly fetched sources, downloads, generated payloads, and captures.
+sources/
+downloads/
+build/
+out/
+logs/
+android/
+artifacts/
+
+# Python and editor by-products.
+__pycache__/
+*.py[cod]
+.DS_Store

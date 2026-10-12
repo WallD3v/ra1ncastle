@@ -1,0 +1,88 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 4080e58..c0b0d50 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -430,6 +430,7 @@ bool nvme_init(void)
+ 
+     nvme_init_stage = "sart-init:sart-ans";
+     nvme_sart = sart_init("/arm-io/sart-ans");
++    const char *sart_ans_error = sart_get_init_stage();
+     if (!nvme_sart) {
+         nvme_init_stage = "sart-init:sart-ans2";
+         nvme_sart = sart_init("/arm-io/sart-ans2");
+@@ -443,7 +444,7 @@ bool nvme_init(void)
+         nvme_sart = sart_init("/arm-io/sart");
+     }
+     if (!nvme_sart) {
+-        nvme_init_stage = "sart-init:no-supported-node";
++        nvme_init_stage = sart_ans_error;
+         goto out_asc;
+     }
+ 
+diff --git a/src/sart.c b/src/sart.c
+index 7287ef0..2cc79fa 100644
+--- a/src/sart.c
++++ b/src/sart.c
+@@ -53,6 +53,13 @@ struct sart_dev {
+ #define APPLE_SART3_SIZE_MAX   GENMASK(29, 0)
+ 
+ #define APPLE_SART3_FLAGS_ALLOW 0xff
++
++static const char *sart_init_stage = "sart:not-started";
++
++const char *sart_get_init_stage(void)
++{
++    return sart_init_stage;
++}
+ 
+ static void sart0_get_entry(sart_dev_t *sart, int index, u8 *flags, void **paddr, size_t *size)
+ {
+@@ -153,18 +160,21 @@ static bool sart3_set_entry(sart_dev_t *sart, int index, u8 flags, void *paddr_,
+ 
+ sart_dev_t *sart_init(const char *adt_path)
+ {
++    sart_init_stage = "sart:adt-node";
+     int sart_path[8];
+     int node = adt_path_offset_trace(adt, adt_path, sart_path);
+     if (node < 0) {
+         printf("sart: Error getting SART node %s\n", adt_path);
+         return NULL;
+     }
+ 
++    sart_init_stage = "sart:reg";
+     u64 base;
+     if (adt_get_reg(adt, sart_path, "reg", 0, &base, NULL) < 0) {
+         printf("sart: Error getting SART %s base address.\n", adt_path);
+         return NULL;
+     }
+ 
++    sart_init_stage = "sart:version-or-compatible";
+     const u32 *sart_version = adt_getprop(adt, node, "sart-version", NULL);
+     const u32 sart_version_zero = 0;
+@@ -180,6 +190,7 @@ sart_dev_t *sart_init(const char *adt_path)
+         }
+     }
+ 
++    sart_init_stage = "sart:alloc";
+     sart_dev_t *sart = calloc(1, sizeof(*sart));
+     if (!sart)
+         return NULL;
+@@ -206,5 +217,6 @@ sart_dev_t *sart_init(const char *adt_path)
+             return NULL;
+     }
+ 
++    sart_init_stage = "sart:ok";
+     printf("sart: SARTv%d %s at 0x%lx\n", *sart_version, adt_path, base);
+ 
+diff --git a/src/sart.h b/src/sart.h
+index ef441e2..7901acf 100644
+--- a/src/sart.h
++++ b/src/sart.h
+@@ -8,6 +8,7 @@
+ typedef struct sart_dev sart_dev_t;
+ 
+ sart_dev_t *sart_init(const char *adt_path);
++const char *sart_get_init_stage(void);
+ void sart_free(sart_dev_t *asc);
+ 
+ bool sart_add_allowed_region(sart_dev_t *sart, void *paddr, size_t sz);

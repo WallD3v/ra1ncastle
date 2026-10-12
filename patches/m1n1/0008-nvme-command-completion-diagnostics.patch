@@ -1,0 +1,70 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 4a02631..112bc67 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -141,6 +141,7 @@ static u8 nvme_queue_size;
+ static struct nvme_queue adminq, ioq;
+ 
+ static const char *nvme_init_stage = "not-started";
++static char nvme_init_detail[128];
+ 
+ const char *nvme_get_init_stage(void)
+ {
+@@ -323,5 +324,6 @@ static bool nvme_exec_command(struct nvme_queue *q, struct nvme_command *cmd, u6
+ {
+     bool found = false;
++    bool completion_seen = false;
+     u64 timeout;
+     u8 cq_tag;
+ 
+@@ -334,7 +336,7 @@ static bool nvme_exec_command(struct nvme_queue *q, struct nvme_command *cmd, u6
+     nvme_poll_syslog();
+ 
+     timeout = timeout_calculate(NVME_TIMEOUT);
+-    struct nvme_completion cqe;
++    struct nvme_completion cqe = {0};
+     while (!timeout_expired(timeout)) {
+         nvme_poll_syslog();
+ 
+@@ -344,12 +346,17 @@ static bool nvme_exec_command(struct nvme_queue *q, struct nvme_command *cmd, u6
+         if ((cqe.status & 1) != q->cq_phase)
+             continue;
+ 
++        completion_seen = true;
+         if (cqe.tag == cq_tag) {
+             found = true;
+             if (result)
+                 *result = cqe.result;
+         } else {
+             printf("nvme: invalid tag in CQ: expected %d but got %d\n", cq_tag, cqe.tag);
++            snprintf(nvme_init_detail, sizeof(nvme_init_detail),
++                     "exec-tag:op=%u:expected=%u:got=%u:raw-status=0x%x", cmd->opcode,
++                     cq_tag, cqe.tag, cqe.status);
++            nvme_init_stage = nvme_init_detail;
+         }
+ 
+         if (nvme_type == NVME_TYPE_T8103)
+@@ -371,12 +378,23 @@ static bool nvme_exec_command(struct nvme_queue *q, struct nvme_command *cmd, u6
+ 
+     if (!found) {
+         printf("nvme: could not find command completion in CQ\n");
++        if (!completion_seen) {
++            snprintf(nvme_init_detail, sizeof(nvme_init_detail),
++                     "exec-timeout:op=%u:csts=0x%x:cc=0x%x:sq-tail=%u:cq-head=%u:raw-status=0x%x",
++                     cmd->opcode, read32(nvme_base + NVME_CSTS),
++                     read32(nvme_base + NVME_CC), q->sq_tail, q->cq_head, cqe.status);
++            nvme_init_stage = nvme_init_detail;
++        }
+         return false;
+     }
+ 
+     cqe.status >>= 1;
+     if (cqe.status) {
+         printf("nvme: command failed with status %d\n", cqe.status);
++        snprintf(nvme_init_detail, sizeof(nvme_init_detail),
++                 "exec-status:op=%u:status=0x%x:result=0x%lx", cmd->opcode, cqe.status,
++                 cqe.result);
++        nvme_init_stage = nvme_init_detail;
+         return false;
+     }
+ 

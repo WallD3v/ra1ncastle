@@ -1,0 +1,79 @@
+--- a/src/kboot.c
++++ b/src/kboot.c
+@@ -2860,9 +2860,13 @@
+     int chosen;
+     size_t i;
+     size_t ns_index;
++    size_t ns_count = 0;
+     u32 selected_nsid = 0;
+-    static u8 probe[SZ_4K * 6] __attribute__((aligned(SZ_4K)));
+-    u32 *nslist = (u32 *)(probe + 5 * SZ_4K);
++    u32 nsids[16] = {0};
++    static u8 storage[SZ_16K * 3] __attribute__((aligned(SZ_16K)));
++    u8 *probe = storage;
++    u8 *io_buffer = storage + 2 * SZ_16K;
++    u32 *nslist = (u32 *)io_buffer;
+     int ret = -1;
+ 
+     chosen = fdt_path_offset(dt, "/chosen");
+@@ -2870,7 +2874,7 @@
+         return -1;
+     fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "starting");
+ 
+-    memset(probe, 0, block_size * block_count);
++    memset(storage, 0, sizeof(storage));
+ 
+     if (!nvme_init()) {
+         printf("ra1ncastle: read-only NVMe probe initialization failed\n");
+@@ -2880,7 +2884,7 @@
+         goto out;
+     }
+ 
+-    if (!nvme_allow_dma_region(probe, sizeof(probe))) {
++    if (!nvme_allow_dma_region(storage, sizeof(storage))) {
+         printf("ra1ncastle: failed to allow NVMe probe buffer through SART\n");
+         fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "init-failed");
+         fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-error",
+@@ -2898,18 +2902,20 @@
+     if (!nvme_identify_active_namespaces(nslist)) {
+         printf("ra1ncastle: active namespace list unsupported; probing NSID 1..16\n");
+         for (ns_index = 0; ns_index < 16; ns_index++)
+-            nslist[ns_index] = ns_index + 1;
++            nsids[ns_count++] = ns_index + 1;
++    } else {
++        for (ns_index = 0; ns_index < 16 && nslist[ns_index]; ns_index++)
++            nsids[ns_count++] = nslist[ns_index];
+     }
+ 
+-    for (ns_index = 0; ns_index < SZ_4K / sizeof(u32); ns_index++) {
+-        u32 nsid = nslist[ns_index];
++    for (ns_index = 0; ns_index < ns_count; ns_index++) {
++        u32 nsid = nsids[ns_index];
+ 
+-        if (!nsid)
+-            break;
+         printf("ra1ncastle: active NVMe namespace %u\n", nsid);
+-        memset(probe, 0, block_size);
+-        if (nvme_read(nsid, 0, probe)) {
++        memset(io_buffer, 0, SZ_16K);
++        if (nvme_read(nsid, 0, io_buffer)) {
+             selected_nsid = nsid;
++            memcpy(probe, io_buffer, block_size);
+             break;
+         }
+         printf("ra1ncastle: namespace %u rejected read of LBA 0\n", nsid);
+@@ -2926,11 +2932,13 @@
+     fdt_setprop_u32(dt, chosen, "ra1ncastle,nvme-probe-nsid", selected_nsid);
+ 
+     for (i = 1; i < block_count; i++) {
+-        if (!nvme_read(selected_nsid, i, probe + i * block_size)) {
++        memset(io_buffer, 0, SZ_16K);
++        if (!nvme_read(selected_nsid, i, io_buffer)) {
+             printf("ra1ncastle: failed to read NVMe LBA %lu\n", i);
+             fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "read-failed");
+             goto out_shutdown;
+         }
++        memcpy(probe + i * block_size, io_buffer, block_size);
+     }
+ 
+     ret = fdt_setprop(dt, chosen, "ra1ncastle,nvme-lba0-lba5", probe,

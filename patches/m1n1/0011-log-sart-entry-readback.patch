@@ -1,0 +1,35 @@
+diff --git a/src/sart.c b/src/sart.c
+index a4f7d13..06a6408 100644
+--- a/src/sart.c
++++ b/src/sart.c
+@@ -225,8 +225,11 @@ sart_dev_t *sart_init(const char *adt_path)
+         size_t sz;
+ 
+         sart->get_entry(sart, i, &flags, &paddr, &sz);
+-        if (flags)
++        if (flags) {
++            printf("sart: boot entry %u flags=0x%x paddr=%p size=0x%lx\n", i, flags, paddr,
++                   sz);
+             sart->protected_entries |= 1 << i;
++        }
+     }
+ 
+     return sart;
+@@ -250,7 +253,16 @@ bool sart_add_allowed_region(sart_dev_t *sart, void *paddr, size_t sz)
+         if (e_flags)
+             continue;
+ 
+-        return sart->set_entry(sart, i, sart->flags_allow, paddr, sz);
++        if (!sart->set_entry(sart, i, sart->flags_allow, paddr, sz)) {
++            printf("sart: failed to write entry %u for paddr=%p size=0x%lx\n", i, paddr, sz);
++            return false;
++        }
++
++        sart->get_entry(sart, i, &e_flags, &e_paddr, &e_sz);
++        printf("sart: mapped entry %u flags=0x%x paddr=%p size=0x%lx"
++               " requested=%p/0x%lx\n",
++               i, e_flags, e_paddr, e_sz, paddr, sz);
++        return true;
+     }
+ 
+     printf("sart: no more free entries\n");

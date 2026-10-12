@@ -1,0 +1,160 @@
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -42,6 +42,7 @@
+ 
+ #define NVME_BOOT_STATUS    0x1300
+ #define NVME_BOOT_STATUS_OK 0xde71ce55
++#define NVME_MODESEL        0x1304
+ 
+ #define NVME_LINEAR_SQ_CTRL    0x24908
+ #define NVME_LINEAR_SQ_CTRL_EN BIT(0)
+@@ -139,6 +140,7 @@
+ static u64 nvme_base;
+ enum nvme_type nvme_type;
+ static u8 nvme_queue_size;
++static bool nvme_has_coastguard;
+ 
+ static struct nvme_queue adminq, ioq;
+ 
+@@ -171,12 +173,13 @@
+     q->owned_cmds = q->cmds;
+     q->owned_cqes = q->cqes;
+ 
+-    if (nvme_type == NVME_TYPE_T8103) {
+-        q->tcbs = memalign(SZ_16K, nvme_queue_size * sizeof(*q->tcbs));
++    if (nvme_has_coastguard) {
++        /* CoastGuard consumes one 16-KiB TCB aperture per queue. */
++        q->tcbs = memalign(SZ_16K, SZ_16K);
+         if (!q->tcbs)
+             goto free_cqes;
+ 
+-        memset(q->tcbs, 0, nvme_queue_size * sizeof(*q->tcbs));
++        memset(q->tcbs, 0, SZ_16K);
+     }
+ 
+     memset(q->cmds, 0, cmdq_size);
+@@ -247,6 +250,7 @@
+ static u8 nvme_submit_command_t8015(struct nvme_queue *q, struct nvme_command *cmd)
+ {
+     u8 tag = q->sq_tail;
++    u8 cid;
+     struct nvme_command *queue_cmd;
+ 
+     if (q->adminq)
+@@ -257,9 +261,22 @@
+     memcpy(queue_cmd, cmd, sizeof(*cmd));
+ 
+     queue_cmd->tag = ++(q->sq_tail);
++    cid = queue_cmd->tag;
+     if (q->sq_tail == nvme_queue_size)
+         q->sq_tail = 0;
+ 
++    if (nvme_has_coastguard) {
++        struct apple_nvmmu_tcb *tcb = &q->tcbs[cid];
++
++        memset(tcb, 0, sizeof(*tcb));
++        tcb->opcode = queue_cmd->opcode;
++        tcb->dma_flags = 3;
++        tcb->slot_id = cid;
++        tcb->len = queue_cmd->cdw12;
++        tcb->prp1 = queue_cmd->prp1;
++        tcb->prp2 = queue_cmd->prp2;
++    }
++
+     /* make sure ANS2 can see the command before triggering it */
+     dma_wmb();
+ 
+@@ -351,7 +368,7 @@
+             nvme_init_stage = nvme_init_detail;
+         }
+ 
+-        if (nvme_type == NVME_TYPE_T8103)
++        if (nvme_has_coastguard)
+             nvme_nvmmu_inval(cqe.tag);
+ 
+         /* increment head and switch phase once the end of the queue has been reached */
+@@ -417,13 +434,14 @@
+ 
+     if (chip_id == T8030) {
+         /*
+-         * A13 uses the ascwrap-v2 compatible shared with T8020. Probe its
+-         * linear submission queue and NVMMU TCB command path. The inherited
+-         * NVMMU_NUM value is 0x3f, matching the native 64-entry layout.
++         * A13 advertises nvme-coastguard, but its linear-SQ enable bit does
++         * not latch. Use the normal T8015 queue format and doorbells while
++         * supplying CoastGuard TCBs for each command.
+          */
+-        nvme_type = NVME_TYPE_T8103;
+-        nvme_queue_size = NVME_QUEUE_SIZE_T8103;
+-        printf("nvme: T8030 selecting linear-SQ/NVMMU mode with depth %u\n",
++        nvme_type = NVME_TYPE_T8015;
++        nvme_queue_size = NVME_QUEUE_SIZE_T8015;
++        nvme_has_coastguard = true;
++        printf("nvme: T8030 selecting standard-SQ/CoastGuard mode with depth %u\n",
+                nvme_queue_size);
+     } else if (adt_is_compatible(adt, node, "iop-ans2,t8015") ||
+         adt_is_compatible(adt, node, "iop,ascwrap-v2")) {
+@@ -501,7 +519,8 @@
+     u32 iboot_aqa = read32(nvme_base + NVME_AQA);
+     u32 iboot_asqs = (iboot_aqa & 0xfff) + 1;
+     u32 iboot_acqs = ((iboot_aqa >> 16) & 0xfff) + 1;
+-    bool reuse_iboot_adminq = nvme_type == NVME_TYPE_T8015 && iboot_asq && iboot_acq &&
++    bool reuse_iboot_adminq = nvme_type == NVME_TYPE_T8015 && !nvme_has_coastguard &&
++                              iboot_asq && iboot_acq &&
+                               !(iboot_asq & (SZ_4K - 1)) &&
+                               !(iboot_acq & (SZ_4K - 1)) && iboot_asqs >= nvme_queue_size &&
+                               iboot_acqs >= nvme_queue_size;
+@@ -524,15 +543,16 @@
+     if (!sart_add_allowed_region(nvme_sart, ioq.cqes, SZ_4K))
+         goto out_shutdown;
+ 
+-    if (nvme_type == NVME_TYPE_T8103) {
+-        printf("nvme: NVMMU pre-init LSQ=0x%x NUM=0x%x STAT=0x%x\n",
++    if (nvme_has_coastguard) {
++        printf("nvme: CoastGuard pre-init MODESEL=0x%x LSQ=0x%x NUM=0x%x STAT=0x%x\n",
++               read32(nvme_base + NVME_MODESEL),
+                read32(nvme_base + NVME_LINEAR_SQ_CTRL), read32(nvme_base + NVMMU_NUM),
+                read32(nvme_base + NVMMU_TCB_STAT));
+         nvme_init_stage = "sart-map-admin-tcb";
+-        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs, 2 * SZ_4K))
++        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs, SZ_16K))
+             goto out_shutdown;
+         nvme_init_stage = "sart-map-io-tcb";
+-        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs, 2 * SZ_4K))
++        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs, SZ_16K))
+             goto out_shutdown;
+     }
+ 
+@@ -545,16 +565,13 @@
+         printf("nvme: inherited iBoot admin queues are unusable; retaining allocated queues\n");
+     }
+ 
+-    if (nvme_type == NVME_TYPE_T8103) {
+-        /* setup controller and NVMMU for linear submission queue */
+-        set32(nvme_base + NVME_LINEAR_SQ_CTRL, NVME_LINEAR_SQ_CTRL_EN);
++    if (nvme_has_coastguard) {
++        /* Set up CoastGuard TCBs without enabling the unsupported linear SQ. */
+         clear32(nvme_base + NVME_UNKNOWN_CTRL, NVME_UNKNOWN_CTRL_PRP_NULL_CHECK);
+-        write32(nvme_base + NVME_MAX_PEND_CMDS_CTRL,
+-                (nvme_queue_size << 16) | nvme_queue_size);
+-        write32(nvme_base + NVMMU_NUM, nvme_queue_size - 1);
++        write32(nvme_base + NVMMU_NUM, NVME_QUEUE_SIZE_T8103 - 1);
+         write64_lo_hi(nvme_base + NVMMU_ASQ_BASE, (u64)adminq.tcbs);
+         write64_lo_hi(nvme_base + NVMMU_IOSQ_BASE, (u64)ioq.tcbs);
+-        printf("nvme: NVMMU configured LSQ=0x%x MAXP=0x%x NUM=0x%x"
++        printf("nvme: CoastGuard configured LSQ=0x%x MAXP=0x%x NUM=0x%x"
+                " ASQ-TCB=0x%lx IOSQ-TCB=0x%lx STAT=0x%x\n",
+                read32(nvme_base + NVME_LINEAR_SQ_CTRL),
+                read32(nvme_base + NVME_MAX_PEND_CMDS_CTRL), read32(nvme_base + NVMMU_NUM),
+@@ -568,6 +585,11 @@
+         printf("nvme: timeout while waiting for CSTS.RDY to clear\n");
+         goto out_shutdown;
+     }
++    if (nvme_has_coastguard) {
++        write32(nvme_base + NVME_MODESEL, 0);
++        printf("nvme: CoastGuard MODESEL=0x%x after controller disable\n",
++               read32(nvme_base + NVME_MODESEL));
++    }
+     if (reuse_iboot_adminq) {
+         memset(adminq.cmds, 0, nvme_queue_size * sizeof(*adminq.cmds));
+         memset(adminq.cqes, 0, nvme_queue_size * sizeof(*adminq.cqes));

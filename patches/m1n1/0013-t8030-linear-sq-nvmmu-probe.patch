@@ -1,0 +1,63 @@
+diff --git a/src/nvme.c b/src/nvme.c
+index 4c8f6ae..37aae9c 100644
+--- a/src/nvme.c
++++ b/src/nvme.c
+@@ -57,7 +57,7 @@
+ #define NVMMU_ASQ_BASE  0x28108
+ #define NVMMU_IOSQ_BASE 0x28110
+ #define NVMMU_TCB_INVAL 0x28118
+-#define NVMMU_TCB_STAT  0x29120
++#define NVMMU_TCB_STAT  0x28120
+ 
+ #define NVME_ADMIN_CMD_DELETE_SQ 0x00
+ #define NVME_ADMIN_CMD_CREATE_SQ 0x01
+@@ -415,7 +415,17 @@ bool nvme_init(void)
+         return NULL;
+     }
+ 
+-    if (adt_is_compatible(adt, node, "iop-ans2,t8015") ||
++    if (chip_id == T8030) {
++        /*
++         * A13 uses the ascwrap-v2 compatible shared with T8020. Probe its
++         * linear submission queue and NVMMU TCB command path while keeping
++         * the conservative 16-entry queue depth used by iBoot.
++         */
++        nvme_type = NVME_TYPE_T8103;
++        nvme_queue_size = NVME_QUEUE_SIZE_T8015;
++        printf("nvme: T8030 selecting linear-SQ/NVMMU mode with depth %u\n",
++               nvme_queue_size);
++    } else if (adt_is_compatible(adt, node, "iop-ans2,t8015") ||
+         adt_is_compatible(adt, node, "iop,ascwrap-v2")) {
+         nvme_type = NVME_TYPE_T8015;
+         nvme_queue_size = NVME_QUEUE_SIZE_T8015;
+@@ -491,7 +501,8 @@ bool nvme_init(void)
+     u32 iboot_aqa = read32(nvme_base + NVME_AQA);
+     u32 iboot_asqs = (iboot_aqa & 0xfff) + 1;
+     u32 iboot_acqs = ((iboot_aqa >> 16) & 0xfff) + 1;
+-    bool reuse_iboot_adminq = iboot_asq && iboot_acq && !(iboot_asq & (SZ_4K - 1)) &&
++    bool reuse_iboot_adminq = nvme_type == NVME_TYPE_T8015 && iboot_asq && iboot_acq &&
++                              !(iboot_asq & (SZ_4K - 1)) &&
+                               !(iboot_acq & (SZ_4K - 1)) && iboot_asqs >= nvme_queue_size &&
+                               iboot_acqs >= nvme_queue_size;
+ 
+@@ -513,6 +524,20 @@ bool nvme_init(void)
+     if (!sart_add_allowed_region(nvme_sart, ioq.cqes, SZ_4K))
+         goto out_shutdown;
+ 
++    if (nvme_type == NVME_TYPE_T8103) {
++        printf("nvme: NVMMU pre-init LSQ=0x%x NUM=0x%x STAT=0x%x\n",
++               read32(nvme_base + NVME_LINEAR_SQ_CTRL), read32(nvme_base + NVMMU_NUM),
++               read32(nvme_base + NVMMU_TCB_STAT));
++        nvme_init_stage = "sart-map-admin-tcb";
++        if (!sart_add_allowed_region(nvme_sart, adminq.tcbs,
++                                     nvme_queue_size * sizeof(*adminq.tcbs)))
++            goto out_shutdown;
++        nvme_init_stage = "sart-map-io-tcb";
++        if (!sart_add_allowed_region(nvme_sart, ioq.tcbs,
++                                     nvme_queue_size * sizeof(*ioq.tcbs)))
++            goto out_shutdown;
++    }
++
+     if (reuse_iboot_adminq) {
+         adminq.cmds = (void *)iboot_asq;
+         adminq.cqes = (void *)iboot_acq;

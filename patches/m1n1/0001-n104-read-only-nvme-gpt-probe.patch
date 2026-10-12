@@ -1,0 +1,80 @@
+diff --git a/src/kboot.c b/src/kboot.c
+index 94bded4..cd8cb16 100644
+--- a/src/kboot.c
++++ b/src/kboot.c
+@@ -18,5 +18,6 @@
+ #include "mcc.h"
+ #include "memory.h"
++#include "nvme.h"
+ #include "pcie.h"
+ #include "pmgr.h"
+ #include "sep.h"
+@@ -2847,6 +2848,60 @@ static int dt_setup_mtd_phram(void)
+     return 0;
+ }
+ 
++/*
++ * Capture only the protective MBR and primary GPT header.  The m1n1 NVMe
++ * implementation exposes reads but no write primitive, making this probe a
++ * safer first step than handing the internal namespace to Linux.
++ */
++static int dt_set_ra1ncastle_storage_probe(void)
++{
++    const size_t block_size = SZ_4K;
++    const size_t block_count = 6;
++    int chosen;
++    size_t i;
++    u8 *probe;
++    int ret = -1;
++
++    chosen = fdt_path_offset(dt, "/chosen");
++    if (chosen < 0)
++        return -1;
++    fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "starting");
++
++    probe = memalign(SZ_4K, block_size * block_count);
++    if (!probe)
++        return -1;
++    memset(probe, 0, block_size * block_count);
++
++    if (!nvme_init()) {
++        printf("ra1ncastle: read-only NVMe probe initialization failed\n");
++        fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "init-failed");
++        goto out;
++    }
++
++    for (i = 0; i < block_count; i++) {
++        if (!nvme_read(1, i, probe + i * block_size)) {
++            printf("ra1ncastle: failed to read NVMe LBA %lu\n", i);
++            fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "read-failed");
++            goto out_shutdown;
++        }
++    }
++
++    ret = fdt_setprop(dt, chosen, "ra1ncastle,nvme-lba0-lba5", probe,
++                      block_size * block_count);
++    if (ret)
++        printf("ra1ncastle: failed to publish NVMe probe in FDT: %d\n", ret);
++    else
++        printf("ra1ncastle: published read-only NVMe LBA0/LBA5 probe\n");
++    if (!ret)
++        fdt_setprop_string(dt, chosen, "ra1ncastle,nvme-probe-status", "ok");
++
++out_shutdown:
++    nvme_shutdown();
++out:
++    free(probe);
++    return ret;
++}
++
+ int kboot_prepare_dt(void *fdt)
+ {
+     if (dt) {
+@@ -2878,5 +2932,7 @@ int kboot_prepare_dt(void *fdt)
+         return -1;
+     if (dt_set_uboot_config())
+         return -1;
++    if (dt_set_ra1ncastle_storage_probe())
++        printf("ra1ncastle: continuing without an NVMe probe result\n");
+     if (dt_set_serial_number())
+         return -1;
