@@ -59,8 +59,13 @@ case "${1:---ncm}" in
     sudo ip addr replace 172.16.42.2/24 dev "$iface"
     sudo ip route replace 172.16.42.0/24 dev "$iface" src 172.16.42.2
     # A host route beats VPNs that later install their own 172.16.42.0/24
-    # route, keeping the iPhone shell from being redirected into a tunnel.
+    # route, keeping the iPhone shell from being redirected into a tunnel. A
+    # dedicated policy table survives VPN clients that rewrite main-table
+    # routes after this script starts.
     sudo ip route replace 172.16.42.1/32 dev "$iface" src 172.16.42.2
+    sudo ip route replace 172.16.42.1/32 dev "$iface" src 172.16.42.2 table 1041
+    sudo ip rule del pref 1041 to 172.16.42.1/32 lookup 1041 2>/dev/null || true
+    sudo ip rule add pref 1041 to 172.16.42.1/32 lookup 1041
 
     route="$(ip route get 172.16.42.1)"
     printf 'Route: %s\n' "$route"
