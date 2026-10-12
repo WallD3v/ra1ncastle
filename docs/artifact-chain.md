@@ -19,8 +19,8 @@
    memory properties, selects the matching `apple,n104` FDT, and enters Linux.
 7. Linux uses 16 KiB pages and simpledrm. Its Apple DWC3 controller runs in
    fixed peripheral mode. `/init` creates ACM plus NCM functions in configfs,
-   starts a shell on `/dev/ttyGS0`, offers telnet at `172.16.42.1:23`, and runs
-   a PTY-independent raw shell at `172.16.42.1:2323`. The raw listener is
+   starts a shell on `/dev/ttyGS0`, offers telnet at `192.0.2.1:23`, and runs
+   a PTY-independent raw shell at `192.0.2.1:2323`. The raw listener is
    recreated by an outer loop after every disconnect because this BusyBox
    build exits after the first client when `nc -k` and `-e` are combined.
 

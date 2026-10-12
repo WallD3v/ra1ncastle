@@ -56,34 +56,28 @@ case "${1:---ncm}" in
 
     printf 'Configuring iPhone NCM interface %s.\n' "$iface"
     sudo ip link set "$iface" up
-    sudo ip addr replace 172.16.42.2/24 dev "$iface"
-    sudo ip route replace 172.16.42.0/24 dev "$iface" src 172.16.42.2
-    # A host route beats VPNs that later install their own 172.16.42.0/24
-    # route, keeping the iPhone shell from being redirected into a tunnel. A
-    # dedicated policy table survives VPN clients that rewrite main-table
-    # routes after this script starts.
-    sudo ip route replace 172.16.42.1/32 dev "$iface" src 172.16.42.2
-    sudo ip route replace 172.16.42.1/32 dev "$iface" src 172.16.42.2 table 1041
-    sudo ip rule del pref 1041 to 172.16.42.1/32 lookup 1041 2>/dev/null || true
-    sudo ip rule add pref 1041 to 172.16.42.1/32 lookup 1041
+    # RFC 5737 TEST-NET-1 avoids the 172.16/12 space commonly captured by
+    # corporate VPNs. The /30 is dedicated to this point-to-point NCM link.
+    sudo ip addr replace 192.0.2.2/30 dev "$iface"
+    sudo ip route replace 192.0.2.0/30 dev "$iface" src 192.0.2.2
 
-    route="$(ip route get 172.16.42.1)"
+    route="$(ip route get 192.0.2.1)"
     printf 'Route: %s\n' "$route"
     grep -q "dev $iface" <<<"$route" || \
-      die "172.16.42.1 is not routed through $iface"
+      die "192.0.2.1 is not routed through $iface"
 
     if command -v nc >/dev/null 2>&1; then
-      printf 'Opening raw shell at 172.16.42.1:2323 (there may be no prompt).\n'
-      exec nc -v 172.16.42.1 2323
+      printf 'Opening raw shell at 192.0.2.1:2323 (there may be no prompt).\n'
+      exec nc -v 192.0.2.1 2323
     elif command -v socat >/dev/null 2>&1; then
-      printf 'Opening raw shell at 172.16.42.1:2323 with socat.\n'
-      exec socat -,rawer,echo=0 TCP:172.16.42.1:2323
+      printf 'Opening raw shell at 192.0.2.1:2323 with socat.\n'
+      exec socat -,rawer,echo=0 TCP:192.0.2.1:2323
     elif command -v python3 >/dev/null 2>&1; then
-      printf 'Opening raw shell at 172.16.42.1:2323 with Python fallback.\n'
+      printf 'Opening raw shell at 192.0.2.1:2323 with Python fallback.\n'
       exec python3 -c '
 import socket, sys, threading
 
-sock = socket.create_connection(("172.16.42.1", 2323))
+sock = socket.create_connection(("192.0.2.1", 2323))
 
 def receive():
     try:

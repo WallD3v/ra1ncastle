@@ -80,7 +80,7 @@ setup_usb_gadget() {
   netif="$($bb ls /sys/class/net 2>/dev/null | $bb grep -E '^(usb|ncm)' | $bb head -n 1)"
   if [ -n "$netif" ]; then
     $bb ip link set "$netif" up
-    $bb ip addr add 172.16.42.1/24 dev "$netif" || true
+    $bb ip addr add 192.0.2.1/30 dev "$netif" || true
     $bb telnetd -p 23 -l /bin/sh
     # tcpsvd keeps the listeners alive independently of individual clients.
     # This matters when a host-side capture is interrupted while its remote

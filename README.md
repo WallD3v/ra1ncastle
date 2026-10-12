@@ -69,8 +69,8 @@ removed automatically after the build.
 `connect-usb-shell.sh` identifies the phone by USB VID:PID `1d6b:1040`, so it
 does not depend on a changing MAC-based interface name or confuse the phone's
 ACM function with the RP2350. Its default `--ncm` mode installs the explicit
-`172.16.42.0/24` link route (important when a VPN owns the default route) and
-opens the persistent raw shell at `172.16.42.1:2323`. Use `--acm` to select the
+`192.0.2.0/30` link route (reserved TEST-NET-1, avoiding VPN private ranges) and
+opens the persistent raw shell at `192.0.2.1:2323`. Use `--acm` to select the
 phone's ACM function instead.
 
 After editing only `initramfs/init`, rebuild the initramfs and final payload
