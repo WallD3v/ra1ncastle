@@ -57,6 +57,10 @@ grep -qx 'CONFIG_NVME_APPLE=m' "$kernel_config" || \
   die 'diagnostic kernel must keep CONFIG_NVME_APPLE=m'
 grep -qx 'CONFIG_NVME_CORE=m' "$kernel_config" || \
   die 'diagnostic kernel must keep CONFIG_NVME_CORE=m'
+grep -qx 'CONFIG_SECURITY_SELINUX=y' "$kernel_config" || \
+  die 'Android-compatible kernel must provide SELinux/selinuxfs'
+grep -qx 'CONFIG_DEFAULT_SECURITY_SELINUX=y' "$kernel_config" || \
+  die 'Android-compatible kernel must select SELinux as the default LSM'
 
 for symbol in \
   USB_CONFIGFS_MASS_STORAGE USB_MASS_STORAGE USB_G_MULTI \

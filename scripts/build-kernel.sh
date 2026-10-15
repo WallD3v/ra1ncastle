@@ -7,6 +7,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/common.sh"
 require_ram_only_ack
 
+if ! command -v dtc >/dev/null 2>&1; then
+  bundled_dtc_tools="$BUILD_DIR/host-tools/dtc-1.7.2"
+  if [[ -x "$bundled_dtc_tools/dtc" ]]; then
+    export PATH="$bundled_dtc_tools:$PATH"
+    if [[ -d "$bundled_dtc_tools/libfdt" ]]; then
+      export LD_LIBRARY_PATH="$bundled_dtc_tools/libfdt${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  fi
+fi
+
 # This old kernel's merge_config.sh has unquoted shell tests and breaks when an
 # absolute -O path contains spaces. Work from the project root and keep every
 # path handed to that helper free of spaces. build-all-native.sh provides a
@@ -52,6 +62,8 @@ make -C "$src" O="$obj" ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
 
 "$src/scripts/config" --file "$obj/.config" --state ARM64_16K_PAGES | rg -q '^y$'
 "$src/scripts/config" --file "$obj/.config" --state USB_DWC3_APPLE | rg -q '^y$'
+"$src/scripts/config" --file "$obj/.config" --state SECURITY_SELINUX | rg -q '^y$'
+"$src/scripts/config" --file "$obj/.config" --state DEFAULT_SECURITY_SELINUX | rg -q '^y$'
 "$src/scripts/config" --file "$obj/.config" --state NVME_CORE | rg -q '^m$'
 "$src/scripts/config" --file "$obj/.config" --state NVME_APPLE | rg -q '^m$'
 "$src/scripts/config" --file "$obj/.config" --state USB_CONFIGFS | rg -q '^y$'

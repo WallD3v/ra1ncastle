@@ -36,6 +36,12 @@ grep -qx 'CONFIG_NVME_CORE=m' "$KERNEL_CONFIG" || \
   die 'refusing Android recovery unless NVMe core remains modular'
 grep -qx 'CONFIG_NVME_APPLE=m' "$KERNEL_CONFIG" || \
   die 'refusing Android recovery unless Apple NVMe remains modular'
+grep -qx 'CONFIG_SECURITY_SELINUX=y' "$KERNEL_CONFIG" || \
+  die 'refusing Android recovery without kernel SELinux/selinuxfs support'
+grep -qx 'CONFIG_DEFAULT_SECURITY_SELINUX=y' "$KERNEL_CONFIG" || \
+  die 'refusing Android recovery unless SELinux is the default LSM'
+grep -qx 'CONFIG_LSM="selinux"' "$KERNEL_CONFIG" || \
+  die 'refusing Android recovery unless SELinux is active in the LSM list'
 if find "$RECOVERY_ROOT" -type f -iname 'nvme*.ko' -print -quit | rg -q .; then
   die 'refusing Android recovery with an NVMe module staged in its ramdisk'
 fi

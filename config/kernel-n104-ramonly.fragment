@@ -9,6 +9,13 @@ CONFIG_PRINTK=y
 CONFIG_PRINTK_TIME=y
 CONFIG_MAGIC_SYSRQ=y
 
+# Android init requires a live selinuxfs mount during first-stage init. Keep
+# SELinux enabled in the RAM-only recovery kernel and make it the active LSM.
+CONFIG_SECURITY=y
+CONFIG_SECURITY_SELINUX=y
+CONFIG_DEFAULT_SECURITY_SELINUX=y
+CONFIG_LSM="selinux"
+
 # Preserve the framebuffer inherited from iBoot/m1n1.
 CONFIG_DRM=y
 CONFIG_DRM_SIMPLEDRM=y

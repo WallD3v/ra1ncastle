@@ -45,6 +45,14 @@ grep -q '^CONFIG_USB_DWC3_APPLE=y$' "$KERNEL_OUT/config" || {
   echo 'error: kernel is missing the Apple USB device controller' >&2
   exit 1
 }
+grep -q '^CONFIG_SECURITY_SELINUX=y$' "$KERNEL_OUT/config" || {
+  echo 'error: Android Recovery kernel must provide SELinux/selinuxfs' >&2
+  exit 1
+}
+grep -q '^CONFIG_DEFAULT_SECURITY_SELINUX=y$' "$KERNEL_OUT/config" || {
+  echo 'error: Android Recovery kernel must activate SELinux as its default LSM' >&2
+  exit 1
+}
 ! grep -q '^CONFIG_USB_F_MASS_STORAGE=y$' "$KERNEL_OUT/config" || {
   echo 'error: refusing a kernel with USB mass-storage gadget enabled' >&2
   exit 1
@@ -79,7 +87,9 @@ if [[ "${RA1NCASTLE_SKIP_LUNCH:-NO}" == YES ]]; then
   # BoardConfig and product configuration without the expensive lunch query.
   export LINEAGE_BUILD=true
   unset INLINE_KERNEL_BUILDING
-  build/soong/soong_ui.bash --build-mode --all-modules --dir="$TREE" recoveryimage
+  # Use the make-mode target path so Soong builds only the requested image
+  # instead of indexing every module in this large checkout on the NTFS disk.
+  build/soong/soong_ui.bash --make-mode recoveryimage
 else
   lunch lineage_snowcastle-cp2a-userdebug
   m recoveryimage
