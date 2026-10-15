@@ -1,0 +1,24 @@
+diff --git a/device/apple/snowcastle/BoardConfig.mk b/device/apple/snowcastle/BoardConfig.mk
+index 0000000..0000000 100644
+--- a/device/apple/snowcastle/BoardConfig.mk
++++ b/device/apple/snowcastle/BoardConfig.mk
+@@ -109,15 +109,19 @@
+ TARGET_AUTO_COLLECT_KERNEL_MODULE_DEPS := true
+ 
++# The external APFS-RW module is only needed for the APFS image scheme.
++# Do not require or load it for normal partitions or RAM-only recovery.
++ifeq ($(SNOWCASTLE_PARTITION_SCHEME),apfs)
+ ifeq ($(shell grep modules_install $(TARGET_KERNEL_SOURCE)-modules/linux-apfs-rw/Makefile),)
+     $(error Please clone linux-apfs-rw and adapt it to be buildable.)
+ else
+     BOARD_RECOVERY_RAMDISK_KERNEL_MODULES_LOAD += apfs.ko
+     BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD += apfs.ko
+     BOOT_KERNEL_MODULES += apfs.ko
+     RECOVERY_KERNEL_MODULES += apfs.ko
+     TARGET_KERNEL_EXT_MODULE_ROOT := $(TARGET_KERNEL_SOURCE)-modules
+     TARGET_KERNEL_EXT_MODULES := linux-apfs-rw
+ endif
++endif
+ 
+ # OTA
+ ifneq ($(SNOWCASTLE_PARTITION_SCHEME),normal)
