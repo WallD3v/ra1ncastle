@@ -16,6 +16,16 @@ if ! command -v "$dtc_bin" >/dev/null 2>&1; then
   [[ -x "$bundled_dtc" ]] || die "missing command: dtc (and no built kernel dtc)"
   dtc_bin="$bundled_dtc"
 fi
+if ! command -v fdtget >/dev/null 2>&1; then
+  bundled_dtc_tools="$BUILD_DIR/host-tools/dtc-1.7.2"
+  [[ -x "$bundled_dtc_tools/fdtget" ]] || \
+    die 'missing command: fdtget (and no bundled dtc host tools)'
+  export PATH="$bundled_dtc_tools:$PATH"
+  if [[ -d "$bundled_dtc_tools/libfdt" ]]; then
+    export LD_LIBRARY_PATH="$bundled_dtc_tools/libfdt${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  fi
+fi
+
 need_cmd file
 need_cmd gzip
 need_cmd sha256sum
@@ -96,6 +106,39 @@ expected_size="$((m1n1_size + prefix_size + bootargs_size + dtb_size + kernel_si
   die "payload size mismatch: got $payload_size, expected $expected_size"
 
 printf 'Verified read-only-storage n104 payload: %s bytes\n' "$payload_size"
+
+android_recovery_dir="$OUT_DIR/payload-android-recovery"
+if [[ -d "$android_recovery_dir" ]]; then
+  for artifact in \
+    "$android_recovery_dir/SHA256SUMS" \
+    "$android_recovery_dir/m1n1-linux-n104-android-recovery.macho" \
+    "$android_recovery_dir/bootargs.txt" "$android_recovery_dir/PROFILE"; do
+    [[ -s "$artifact" ]] || die "incomplete Android recovery profile artifact: $artifact"
+  done
+  (cd "$android_recovery_dir" && sha256sum --check SHA256SUMS)
+  grep -qx 'profile=android-recovery' "$android_recovery_dir/PROFILE" || \
+    die 'Android recovery profile manifest is invalid'
+  grep -qx 'storage=ram-only' "$android_recovery_dir/PROFILE" || \
+    die 'Android recovery profile must remain RAM-only'
+  grep -qx 'nvme=modular-and-not-staged-or-autoloaded' "$android_recovery_dir/PROFILE" || \
+    die 'Android recovery profile has an unexpected NVMe policy'
+  grep -qx 'CONFIG_NVME_CORE=m' "$kernel_config" || \
+    die 'Android recovery kernel must keep NVMe core modular'
+  grep -qx 'CONFIG_NVME_APPLE=m' "$kernel_config" || \
+    die 'Android recovery kernel must keep Apple NVMe modular'
+  recovery_root="$ROOT/android/lineage-24.0/out/target/product/snowcastle/recovery/root"
+  if find "$recovery_root" -type f -iname 'nvme*.ko' -print -quit | rg -q .; then
+    die 'Android recovery ramdisk unexpectedly contains an NVMe module'
+  fi
+  modules_load="$recovery_root/system/etc/modules.load.normal"
+  [[ -s "$modules_load" ]] || die 'Android recovery modules.load.normal is missing'
+  if grep -Ev '^[[:space:]]*(#|$)' "$modules_load" | rg -qi 'nvme'; then
+    die 'Android recovery ramdisk requests automatic NVMe module loading'
+  fi
+  gzip -t "$ROOT/android/lineage-24.0/out/target/product/snowcastle/kernel"
+  gzip -t "$ROOT/android/lineage-24.0/out/target/product/snowcastle/ramdisk-recovery.img"
+  printf 'Verified RAM-only Android Recovery payload.\n'
+fi
 
 # The write profile is intentionally optional and separate. Verify it whenever
 # present so a malformed DT contract can never reach ram-boot.

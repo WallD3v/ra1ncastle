@@ -7,6 +7,16 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/common.sh"
 require_ram_only_ack
 
+if ! command -v fdtget >/dev/null 2>&1; then
+  bundled_dtc_tools="$BUILD_DIR/host-tools/dtc-1.7.2"
+  if [[ -x "$bundled_dtc_tools/fdtget" ]]; then
+    export PATH="$bundled_dtc_tools:$PATH"
+    if [[ -d "$bundled_dtc_tools/libfdt" ]]; then
+      export LD_LIBRARY_PATH="$bundled_dtc_tools/libfdt${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  fi
+fi
+
 assert_pinned_checkout "$SOURCES_DIR/remote_boot" "$REMOTE_BOOT_REV"
 assert_pinned_checkout "$SOURCES_DIR/usbliter8" "$USBLITER8_REV"
 
@@ -40,6 +50,10 @@ case "$boot_profile" in
     require_android_write_ack
     payload="$OUT_DIR/payload-android-write/m1n1-linux-n104-android-write.macho"
     boot_out="$OUT_DIR/bootchain-android-write"
+    ;;
+  android-recovery)
+    payload="$OUT_DIR/payload-android-recovery/m1n1-linux-n104-android-recovery.macho"
+    boot_out="$OUT_DIR/bootchain-android-recovery"
     ;;
   *)
     die "unknown RA1NCASTLE_BOOT_PROFILE: $boot_profile"
@@ -103,6 +117,19 @@ if [[ "$boot_profile" == android-write ]]; then
   expected_ranges="$(printf '0 %x 0 %x' "$ANDROID_WRITE_LBA_START" "$ANDROID_WRITE_LBA_END")"
   [[ "$(fdtget -t x "$OUT_DIR/payload-android-write/t8030-n104-android-write.dtb" /soc/nvme@27acc0000 ra1ncastle,write-allow-lba-ranges)" == "$expected_ranges" ]] || die 'Android-write DTB has an invalid immutable LBA allowlist'
   printf 'Using separate Android-write payload: NSID %s, only LBAs %s..%s may be write-enabled by the driver.\n' "$ANDROID_WRITE_NSID" "$ANDROID_WRITE_LBA_START" "$ANDROID_WRITE_LBA_END"
+fi
+if [[ "$boot_profile" == android-recovery ]]; then
+  [[ -s "$OUT_DIR/payload-android-recovery/SHA256SUMS" ]] || \
+    die 'Android recovery payload is not packaged; run scripts/build-android-recovery.sh'
+  (cd "$OUT_DIR/payload-android-recovery" && sha256sum --check SHA256SUMS)
+  grep -qx 'profile=android-recovery' "$OUT_DIR/payload-android-recovery/PROFILE" || \
+    die 'Android recovery profile manifest is invalid'
+  grep -qx 'storage=ram-only' "$OUT_DIR/payload-android-recovery/PROFILE" || \
+    die 'Android recovery profile must remain RAM-only'
+  grep -qx 'nvme=modular-and-not-staged-or-autoloaded' \
+    "$OUT_DIR/payload-android-recovery/PROFILE" || \
+    die 'Android recovery profile has an unexpected NVMe policy'
+  printf 'Using RAM-only Android Recovery payload; no storage-write profile selected.\n'
 fi
 
 # Create the two volatile-upload containers on the host. Neither operation

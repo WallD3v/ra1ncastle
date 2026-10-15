@@ -94,3 +94,4 @@ sha256sum "$PRODUCT_OUT/recovery.img"
 printf 'RAM-only Android Recovery: %s\n' "$PRODUCT_OUT/recovery.img"
 
 "$ROOT/scripts/package-m1n1-recovery.sh"
+"$ROOT/scripts/package-android-recovery-payload.sh"

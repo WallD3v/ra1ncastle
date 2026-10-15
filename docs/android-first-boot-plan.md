@@ -64,7 +64,10 @@ not enforcement by itself; the driver must consume the contract fail-closed.
 4. Extract device firmware locally from an Apple IPSW; never commit or
    redistribute it.
 5. Build `snow` for `SNOWCASTLE_PARTITION_SCHEME=normal` and 16 KiB pages.
-6. Package and tether-boot `m1n1-recovery.bin` without writing a partition.
+6. Package the Android recovery kernel and ramdisk into the existing patched-iBoot
+   payload format, then tether-boot with `RA1NCASTLE_BOOT_PROFILE=android-recovery`
+   without writing a partition. The separate Snowcastle `m1n1-recovery.bin` bundle
+   is retained as a build artifact but is not sent through the Linux iDevice loader.
 7. Capture framebuffer logs plus ADB enumeration. Only after recovery is stable,
    enable the range-limited install profile and flash p2-p5.
 
