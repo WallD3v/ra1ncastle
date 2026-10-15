@@ -1,4 +1,4 @@
-Я хочу разработать аналог Project Sandcastle/Snowcastle для обычного iPhone 11 — не Pro и не Pro Max.
+Я разрабатываю ra1ncastle — Android/Linux для обычного iPhone 11 (не Pro и не Pro Max).
 
 Моя конфигурация:
 - Устройство: iPhone 11, identifier iPhone12,1
@@ -21,7 +21,7 @@ DFU
 → m1n1
 → Linux для T8030/n104ap
 → initramfs с shell через USB
-→ затем Snowcastle/LineageOS Android
+→ затем Android на базе LineageOS
 
 Известная исходная база:
 1. usbliter8:
@@ -36,7 +36,7 @@ DFU
    https://github.com/yhavry/Hoolock-Docs-A13
    Ранее упоминалась ветка `t8030` и commit
    `38e339f66253b40b046ef84bd910426eba12f822`.
-4. Snowcastle:
+4. Исходная device-конфигурация LineageOS:
    https://github.com/LineageOS/android_device_apple_snowcastle
 5. Старый Sandcastle:
    https://github.com/corellium/projectsandcastle
@@ -63,7 +63,7 @@ DFU
 6. Загрузить всё через usbliter8/iBoot без записи на внутренний накопитель.
 7. Получить kernel log и интерактивный shell через USB serial или USB Ethernet.
 8. Зафиксировать воспроизводимые команды сборки и загрузки в README/скриптах.
-9. После успешного Linux bring-up перейти к ADB и Snowcastle/LineageOS.
+9. После успешного Linux bring-up перейти к ADB и Android на базе LineageOS.
 
 Работай практически: исследуй актуальные upstream-репозитории, создай структуру
 проекта в текущей папке, добавь скрипты для установки зависимостей, сборки и

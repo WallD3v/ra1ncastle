@@ -56,7 +56,7 @@ baseband и полноценное энергосбережение не дов�
   `f54f602220101dffaa500ddf2ca3d708243c8b73`.
 - remote_boot: `yhavry/remote_boot:d421-a12-a13-postpwned-prep`, commit
   `e9c6b2efcd737869fcc7c0f31ce087c0ad4e259b`.
-- Snowcastle device tree: LineageOS `lineage-24.0`, ранее выбран commit
+- Upstream Android device tree: LineageOS `lineage-24.0`, ранее выбран commit
   `4004579eaaf4b2e81fbfb5806d701f1d2ae8dab2`.
 
 В pinned Linux уже существует `arch/arm64/boot/dts/apple/t8030-n104.dts`,
@@ -136,7 +136,7 @@ p2–p5 должны аппаратно отвергаться.
 
 ## Android-план и незавершённое состояние
 
-Планировался Snowcastle/LineageOS `lineage-24.0`, normal partition scheme,
+Планировался Android на базе LineageOS `lineage-24.0`, normal partition scheme,
 16 KiB pages. Первый честный milestone — Android recovery/init с ADB и
 fastbootd, а не нарисованный логотип. Далее: проверка имён и размеров p2–p5,
 range-limited write allowlist, canary в metadata и лишь затем system/vendor.

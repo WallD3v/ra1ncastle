@@ -9,7 +9,7 @@ DFU -> usbliter8 -> PAC-safe raw iBoot -> m1n1 -> Linux -> BusyBox initramfs
 Target: `iPhone12,1`, board `n104ap`, SoC `T8030/A13`. Stable Linux over USB
 NCM and kernel-side read-only T8030 NVMe/GPT enumeration are validated.
 The APFS container has now been safely shrunk under iOS and dedicated GPT
-partitions have been created for the Snowcastle normal-partition layout.
+partitions have been created for the LineageOS normal-partition layout used by ra1ncastle.
 
 The important discovery is that the documented Linux T8030 snapshot already
 contains `t8030-n104.dts`; a new minimal DTS is not needed for the first boot.
@@ -119,7 +119,7 @@ It must not be used until driver-side fail-closed range enforcement lands; see
 
 Android work is tracked in
 [docs/android-first-boot-plan.md](docs/android-first-boot-plan.md). The selected
-userspace baseline is Snowcastle `lineage-24.0`; the first target is recovery
+userspace baseline is LineageOS `lineage-24.0`; the first target is recovery
 plus ADB/fastbootd, before a full system boot.
 
 See

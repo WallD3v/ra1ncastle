@@ -58,7 +58,7 @@ git lfs install --local
 
 actual="$(git -C device/apple/snowcastle rev-parse HEAD)"
 [[ "$actual" == "$SNOWCASTLE_REV" ]] || \
-  die "Snowcastle revision mismatch: $actual"
+  die "upstream Android device-tree revision mismatch: $actual"
 
 printf 'LineageOS tree ready: %s\n' "$tree"
 printf 'Next: prepare the patched kernel and private firmware inputs.\n'

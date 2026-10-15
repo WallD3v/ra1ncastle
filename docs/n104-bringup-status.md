@@ -86,7 +86,7 @@ dedicated Android partitions.
 ## APFS/GPT milestone
 
 On 2026-09-30, APFS was resized under normal jailbroken iOS and the disk was
-partitioned for Snowcastle. iOS rebooted successfully and all five device nodes
+partitioned for ra1ncastle's Android layout. iOS rebooted successfully and all five device nodes
 were published. Both GPT copies and the APFS size/UUID passed pre-write,
 post-write, and post-reboot validation. No Android partition is formatted yet.
 

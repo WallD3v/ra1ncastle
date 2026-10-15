@@ -38,7 +38,7 @@ validated before GPT was changed.
 The Android start and all fixed-size partition boundaries are aligned to 1 MiB.
 The final usable GPT sector is intentionally left free, giving userdata an even
 number of 4096-byte sectors.
-The sizes meet Snowcastle's published minimums: system 3 GiB, vendor 256 MiB,
+The sizes meet the upstream Android device profile's published minimums: system 3 GiB, vendor 256 MiB,
 metadata 16 MiB, and userdata 2 GiB.
 
 ## Completed transaction and validation

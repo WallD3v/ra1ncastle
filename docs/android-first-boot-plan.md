@@ -14,7 +14,7 @@ GUI. A static logo is not counted as Android boot.
 ## Selected upstream
 
 - LineageOS branch: `lineage-24.0`
-- Snowcastle commit: `4004579eaaf4b2e81fbfb5806d701f1d2ae8dab2`
+- Upstream Android device-tree commit: `4004579eaaf4b2e81fbfb5806d701f1d2ae8dab2`
 - partition scheme: `normal`
 - page size: 16 KiB
 - first target: recovery ramdisk with ADB and fastbootd
@@ -58,15 +58,15 @@ not enforcement by itself; the driver must consume the contract fail-closed.
 
 ## Build sequence
 
-1. Sync LineageOS 24.0 and the Snowcastle/mainline device dependencies.
+1. Sync LineageOS 24.0 and the upstream/mainline device dependencies.
 2. Create an Android kernel worktree from the already validated T8030 source.
-3. Apply the ra1ncastle NVMe/SART patch and Snowcastle's Android kernel patches.
+3. Apply the ra1ncastle NVMe/SART patch and the Android kernel patches.
 4. Extract device firmware locally from an Apple IPSW; never commit or
    redistribute it.
-5. Build `snow` for `SNOWCASTLE_PARTITION_SCHEME=normal` and 16 KiB pages.
+5. Build the upstream Apple-device target for `SNOWCASTLE_PARTITION_SCHEME=normal` and 16 KiB pages.
 6. Package the Android recovery kernel and ramdisk into the existing patched-iBoot
    payload format, then tether-boot with `RA1NCASTLE_BOOT_PROFILE=android-recovery`
-   without writing a partition. The separate Snowcastle `m1n1-recovery.bin` bundle
+   without writing a partition. The separate `m1n1-recovery.bin` bundle
    is retained as a build artifact but is not sent through the Linux iDevice loader.
 7. Capture framebuffer logs plus ADB enumeration. Only after recovery is stable,
    enable the range-limited install profile and flash p2-p5.

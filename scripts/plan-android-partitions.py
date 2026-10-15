@@ -154,7 +154,7 @@ def main() -> None:
     if layout[-1][2] > gpt["last_usable"]:
         die("calculated layout extends beyond the last usable GPT sector")
     if layout[-1][2] - layout[-1][1] + 1 < 2 * 1024**3 // SECTOR_SIZE:
-        die("calculated userdata is below Snowcastle's 2 GiB minimum")
+        die("calculated userdata is below the upstream device profile's 2 GiB minimum")
 
     print("VALIDATED READ-ONLY BASELINE")
     print(f"snapshot_sha256={digest}")

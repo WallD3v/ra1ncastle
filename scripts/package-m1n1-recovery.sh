@@ -60,4 +60,4 @@ fi
 mv -f "$temporary" "$output"
 trap - EXIT
 sha256sum "$output"
-printf 'Snowcastle M1N1 Recovery payload: %s\n' "$output"
+printf 'ra1ncastle M1N1 Recovery payload: %s\n' "$output"
