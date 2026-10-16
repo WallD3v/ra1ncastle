@@ -7,6 +7,10 @@ complete. The hardware has booted a 16 KiB kernel, simpledrm, Binder devices,
 USB NCM, and the T8030 NVMe controller. The kernel parsed the five-partition
 GPT while every namespace reported read-only.
 
+The first Android Recovery boot has now reached Android init and published
+ADB. This recovery profile is RAM-only: the NVMe driver is not staged or
+autoloaded, and no internal partitions are mounted.
+
 The practical estimate is about 70% to an authentic Android recovery/init boot
 with ADB, 55-60% to Android bootanimation, and substantially less to a usable
 GUI. A static logo is not counted as Android boot.
@@ -73,9 +77,17 @@ not enforcement by itself; the driver must consume the contract fail-closed.
 
 ## Success gates
 
-- Gate A: recovery kernel reaches Android init and publishes ADB.
+- Gate A: **passed** — recovery reached Android init and publishes ADB.
 - Gate B: fastbootd reports exactly `system`, `vendor`, `metadata`, `userdata`.
 - Gate C: host-side sparse-image expanded sizes fit their target partitions.
 - Gate D: write allowlist tests pass, and a metadata-partition canary readback
   succeeds without any change to GPT or APFS hashes.
 - Gate E: flash system/vendor, format metadata/userdata, tether-boot Android.
+
+## Follow-up TODOs
+
+- [ ] Low priority: investigate why the Recovery screen displays `snowcastle`
+  even though the built product is `ra1ncastle` (`ro.product.system.name` and
+  build flavor are already `ra1ncastle`). Check Recovery UI/device-name sources
+  and update the visible branding without changing the hardware device
+  codename required by the iPhone device tree.
