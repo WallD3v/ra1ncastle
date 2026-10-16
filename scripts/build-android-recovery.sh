@@ -71,21 +71,46 @@ install -m 0644 "$KERNEL_OUT/t8030-n104.dtb" "$PREBUILT_DIR/t8030-n104.dtb"
   exit 1
 }
 
-# Keep the product branding in ra1ncastle even when repo sync restores the
-# upstream Snowcastle device tree. The device codename stays unchanged because
-# init, firmware, and board configuration use it to identify the iPhone target.
-PRODUCT_MK="$TREE/device/apple/snowcastle/lineage_snowcastle.mk"
-PRODUCTS_MK="$TREE/device/apple/snowcastle/AndroidProducts.mk"
-sed -i \
-  -e 's/^PRODUCT_NAME := lineage_snowcastle$/PRODUCT_NAME := ra1ncastle/' \
-  -e 's/^PRODUCT_MODEL := Snowcastle$/PRODUCT_MODEL := Ra1ncastle/' \
-  "$PRODUCT_MK"
-sed -i \
-  -e 's/COMMON_LUNCH_CHOICES += lineage_snowcastle-/COMMON_LUNCH_CHOICES += ra1ncastle-/' \
-  "$PRODUCTS_MK"
-grep -qx 'PRODUCT_NAME := ra1ncastle' "$PRODUCT_MK"
-grep -qx 'PRODUCT_MODEL := Ra1ncastle' "$PRODUCT_MK"
-grep -q 'COMMON_LUNCH_CHOICES += ra1ncastle-' "$PRODUCTS_MK"
+# Register a distinct ra1ncastle product while preserving the upstream device
+# target. Android requires the product name and product makefile basename to
+# match; snowcastle remains only the hardware/device codename.
+DEVICE_DIR="$TREE/device/apple/snowcastle"
+PRODUCT_MK="$DEVICE_DIR/lineage_snowcastle.mk"
+RA1NCASTLE_PRODUCT_MK="$DEVICE_DIR/ra1ncastle.mk"
+PRODUCTS_MK="$DEVICE_DIR/AndroidProducts.mk"
+python3 - "$PRODUCT_MK" "$RA1NCASTLE_PRODUCT_MK" "$PRODUCTS_MK" <<'PY'
+from pathlib import Path
+import sys
+
+base_path, branded_path, products_path = map(Path, sys.argv[1:])
+base = base_path.read_text()
+base = base.replace("PRODUCT_NAME := ra1ncastle", "PRODUCT_NAME := lineage_snowcastle")
+base = base.replace("PRODUCT_MODEL := Ra1ncastle", "PRODUCT_MODEL := Snowcastle")
+base_path.write_text(base)
+
+branded = base.replace("PRODUCT_NAME := lineage_snowcastle", "PRODUCT_NAME := ra1ncastle")
+branded = branded.replace("PRODUCT_MODEL := Snowcastle", "PRODUCT_MODEL := Ra1ncastle")
+branded_path.write_text(branded)
+
+products = products_path.read_text()
+makefile_entry = "    $(LOCAL_DIR)/ra1ncastle.mk \\\n"
+if makefile_entry not in products:
+    products = products.replace(
+        "PRODUCT_MAKEFILES := \\\n",
+        "PRODUCT_MAKEFILES := \\\n" + makefile_entry,
+        1,
+    )
+lunch_entry = "    $(eval COMMON_LUNCH_CHOICES += ra1ncastle-$(build_type)) \\\n"
+if lunch_entry not in products:
+    products = products.replace(
+        "$(foreach build_type, user userdebug eng, \\\n",
+        "$(foreach build_type, user userdebug eng, \\\n" + lunch_entry,
+        1,
+    )
+if "$(LOCAL_DIR)/ra1ncastle.mk" not in products or lunch_entry not in products:
+    raise SystemExit("failed to register the ra1ncastle Android product")
+products_path.write_text(products)
+PY
 
 cd "$TREE"
 export PATH="$TREE/.repo/repo:$PATH"
