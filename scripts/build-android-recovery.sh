@@ -90,6 +90,14 @@ base_path.write_text(base)
 
 branded = base.replace("PRODUCT_NAME := lineage_snowcastle", "PRODUCT_NAME := ra1ncastle")
 branded = branded.replace("PRODUCT_MODEL := Snowcastle", "PRODUCT_MODEL := Ra1ncastle")
+branded += """
+
+# Present the ra1ncastle project name in Recovery while keeping PRODUCT_DEVICE
+# bound to the upstream snowcastle hardware tree for device-specific build logic.
+PRODUCT_SYSTEM_PROPERTIES += \\
+    ro.lineage.device=ra1ncastle \\
+    ro.product.system.device=ra1ncastle
+"""
 branded_path.write_text(branded)
 
 products = products_path.read_text()
@@ -141,6 +149,25 @@ PRODUCT_OUT="$TREE/out/target/product/snowcastle"
   echo "error: build completed without producing $PRODUCT_OUT/recovery.img" >&2
   exit 1
 }
+assert_last_property() {
+  local prop_file="$1" prop_name="$2" expected="$3" actual
+  actual="$(awk -F= -v key="$prop_name" \
+    '$1 == key { value = substr($0, index($0, "=") + 1) } END { print value }' \
+    "$prop_file")"
+  [[ "$actual" == "$expected" ]] || {
+    echo "error: $prop_name in $prop_file is '$actual', expected '$expected'" >&2
+    exit 1
+  }
+}
+for prop_file in "$PRODUCT_OUT/system/build.prop" \
+    "$PRODUCT_OUT/recovery/root/prop.default"; do
+  [[ -s "$prop_file" ]] || {
+    echo "error: missing generated Recovery property file: $prop_file" >&2
+    exit 1
+  }
+  assert_last_property "$prop_file" ro.lineage.device ra1ncastle
+  assert_last_property "$prop_file" ro.product.system.device ra1ncastle
+done
 sha256sum "$PRODUCT_OUT/recovery.img"
 printf 'RAM-only Android Recovery: %s\n' "$PRODUCT_OUT/recovery.img"
 
