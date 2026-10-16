@@ -659,7 +659,7 @@ index be3b91b43ea5..739d9697055a 100644
 +static const struct nvme_ctrl_ops nvme_ctrl_ops_read_only = {
 +	.name = "apple-nvme-read-only",
 +	.module = THIS_MODULE,
-+	.flags = NVME_F_FORCE_READ_ONLY,
++	.flags = NVME_F_FORCE_READ_ONLY | NVME_F_NO_USER_ADMIN_PASSTHRU,
 +	.reg_read32 = apple_nvme_reg_read32,
 +	.reg_write32 = apple_nvme_reg_write32,
 +	.reg_read64 = apple_nvme_reg_read64,
