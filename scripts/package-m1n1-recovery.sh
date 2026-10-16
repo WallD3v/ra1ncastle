@@ -7,7 +7,7 @@ TREE="$ROOT/android/lineage-24.0"
 DEVICE="$TREE/device/apple/snowcastle"
 PRODUCT_OUT="$TREE/out/target/product/snowcastle"
 M1N1_SOURCE="$ROOT/sources/m1n1/build/m1n1.bin"
-SOONG_VARIABLES="$TREE/out/soong/soong.lineage_snowcastle.variables"
+SOONG_VARIABLES="$TREE/out/soong/soong.ra1ncastle.variables"
 
 for input in \
   "$M1N1_SOURCE" \

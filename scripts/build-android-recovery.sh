@@ -71,6 +71,22 @@ install -m 0644 "$KERNEL_OUT/t8030-n104.dtb" "$PREBUILT_DIR/t8030-n104.dtb"
   exit 1
 }
 
+# Keep the product branding in ra1ncastle even when repo sync restores the
+# upstream Snowcastle device tree. The device codename stays unchanged because
+# init, firmware, and board configuration use it to identify the iPhone target.
+PRODUCT_MK="$TREE/device/apple/snowcastle/lineage_snowcastle.mk"
+PRODUCTS_MK="$TREE/device/apple/snowcastle/AndroidProducts.mk"
+sed -i \
+  -e 's/^PRODUCT_NAME := lineage_snowcastle$/PRODUCT_NAME := ra1ncastle/' \
+  -e 's/^PRODUCT_MODEL := Snowcastle$/PRODUCT_MODEL := Ra1ncastle/' \
+  "$PRODUCT_MK"
+sed -i \
+  -e 's/COMMON_LUNCH_CHOICES += lineage_snowcastle-/COMMON_LUNCH_CHOICES += ra1ncastle-/' \
+  "$PRODUCTS_MK"
+grep -qx 'PRODUCT_NAME := ra1ncastle' "$PRODUCT_MK"
+grep -qx 'PRODUCT_MODEL := Ra1ncastle' "$PRODUCT_MK"
+grep -q 'COMMON_LUNCH_CHOICES += ra1ncastle-' "$PRODUCTS_MK"
+
 cd "$TREE"
 export PATH="$TREE/.repo/repo:$PATH"
 # shellcheck disable=SC1091
@@ -78,7 +94,7 @@ source build/envsetup.sh
 if [[ "${RA1NCASTLE_SKIP_LUNCH:-NO}" == YES ]]; then
   # Use only after this product/variant has already been validated with lunch.
   # This avoids re-running the costly Make variable dump on the NTFS HDD.
-  export TARGET_PRODUCT=lineage_snowcastle
+  export TARGET_PRODUCT=ra1ncastle
   export TARGET_RELEASE=cp2a
   export TARGET_BUILD_VARIANT=userdebug
   export TARGET_BUILD_TYPE=release
@@ -91,7 +107,7 @@ if [[ "${RA1NCASTLE_SKIP_LUNCH:-NO}" == YES ]]; then
   # instead of indexing every module in this large checkout on the NTFS disk.
   build/soong/soong_ui.bash --make-mode recoveryimage
 else
-  lunch lineage_snowcastle-cp2a-userdebug
+  lunch ra1ncastle-cp2a-userdebug
   m recoveryimage
 fi
 
