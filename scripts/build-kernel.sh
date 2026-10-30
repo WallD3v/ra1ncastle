@@ -17,18 +17,17 @@ if ! command -v dtc >/dev/null 2>&1; then
   fi
 fi
 
-# This old kernel's merge_config.sh has unquoted shell tests and breaks when an
-# absolute -O path contains spaces. Work from the project root and keep every
-# path handed to that helper free of spaces. build-all-native.sh provides a
-# temporary bind-mount alias when the real workspace path contains spaces.
-[[ "$PROJECT_ROOT" != *[' ':]* ]] || die "kernel source path contains spaces; run scripts/build-all-native.sh"
+# This old kernel's merge_config.sh and Makefiles break when the absolute -O
+# path contains spaces. Keep the object tree path space-free even when the
+# project itself lives on an NTFS mount whose path contains spaces.
 cd "$PROJECT_ROOT"
 src_repo="$PROJECT_ROOT/sources/linux"
 linux_patch="$PROJECT_ROOT/patches/linux/0001-t8030-read-only-nvme-bringup.patch"
 android_write_patch="$PROJECT_ROOT/patches/linux/0002-t8030-android-write-allowlist.patch"
 src="${RA1NCASTLE_LINUX_WORKTREE:-/tmp/ra1ncastle-linux-t8030-$(id -u)}"
 docs="$PROJECT_ROOT/sources/hoolock-docs-a13"
-obj="$BUILD_DIR/linux-n104"
+obj="${RA1NCASTLE_KERNEL_OBJ:-$BUILD_DIR/linux-n104}"
+[[ "$obj" != *[' ':]* ]] || die "kernel object path contains spaces; set RA1NCASTLE_KERNEL_OBJ to a space-free directory"
 assert_pinned_checkout "$src_repo" "$LINUX_REV"
 assert_pinned_checkout "$docs" "$HOOLOCK_DOCS_REV"
 [[ -s "$linux_patch" ]] || die "missing T8030 Linux patch: $linux_patch"
@@ -53,10 +52,14 @@ git -C "$src" diff --check
 
 mkdir -p "$obj" "$OUT_DIR/kernel"
 base_config="$BUILD_DIR/kernel-n104-base.config"
+spacefree_base_config="$obj/kernel-n104-base.config"
+spacefree_fragment="$obj/kernel-n104-ramonly.fragment"
 cp "$docs/config_16k" "$base_config"
+cp "$base_config" "$spacefree_base_config"
+cp "$PROJECT_ROOT/config/kernel-n104-ramonly.fragment" "$spacefree_fragment"
 
 "$src/scripts/kconfig/merge_config.sh" -m -O "$obj" \
-  "$base_config" "$PROJECT_ROOT/config/kernel-n104-ramonly.fragment"
+  "$spacefree_base_config" "$spacefree_fragment"
 
 make -C "$src" O="$obj" ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
 

@@ -16,8 +16,8 @@
 > [!CAUTION]
 > This is experimental low-level software for a specific device. The validated
 > boot path is **tethered and RAM-resident**. Do not use the Android-write
-> profile on hardware: its latest ioctl safety fix still needs a kernel build,
-> boundary testing, and device validation. Read [the safety notes](docs/safety.md)
+> profile on hardware: the updated driver now builds, but allowlist boundary
+> tests and device validation remain outstanding. Read [the safety notes](docs/safety.md)
 > before building or booting anything.
 
 `ra1ncastle` explores what it takes to bring Linux—and eventually Android—to
@@ -75,8 +75,9 @@ USB, and the DFU boot process.
   diagnostic path is read-only; storage-probe tooling is separately selected
   and limited to GPT discovery.
 - The Android-write profile is a separate artifact with an intended namespace
-  and LBA allowlist. Its driver changes are **not yet fully rebuilt and
-  validated**. Do not boot it on the iPhone until the documented gates pass.
+  and LBA allowlist. The kernel compiles with the current driver restrictions,
+  but the profile has not passed boundary tests or device validation. Do not
+  boot it on the iPhone until the documented gates pass.
 - Apple firmware and locally extracted device files are not included. Do not
   commit firmware, IPSWs, local configuration, build outputs, or device logs.
 
@@ -121,8 +122,15 @@ contains spaces, because the legacy kernel build system cannot handle them.
 The mount is removed when the build exits. It runs the complete native build by
 default; to rebuild just the kernel, use
 `./scripts/build-all-native.sh scripts/build-kernel.sh`. The bind mount may
-prompt for `sudo`. Build and boot commands should be run only after reviewing
-their script and the relevant safety acknowledgments.
+prompt for `sudo`. For a kernel-only build, the object tree can instead be
+placed at a space-free path (for example, `/tmp`, which is temporary):
+
+```bash
+RA1NCASTLE_KERNEL_OBJ=/tmp/ra1ncastle-kernel-n104 ./scripts/build-kernel.sh
+```
+
+Build and boot commands should be run only after reviewing their script and
+the relevant safety acknowledgments.
 
 ## Useful workflows
 
