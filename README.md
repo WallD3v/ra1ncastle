@@ -16,8 +16,8 @@
 > [!CAUTION]
 > This is experimental low-level software for a specific device. The validated
 > boot path is **tethered and RAM-resident**. Do not use the Android-write
-> profile on hardware: the updated driver now builds, but allowlist boundary
-> tests and device validation remain outstanding. Read [the safety notes](docs/safety.md)
+> profile on hardware: its host-side LBA predicate tests pass, but full I/O-path
+> and device validation remain outstanding. Read [the safety notes](docs/safety.md)
 > before building or booting anything.
 
 `ra1ncastle` explores what it takes to bring Linux—and eventually Android—to
@@ -76,8 +76,9 @@ USB, and the DFU boot process.
   and limited to GPT discovery.
 - The Android-write profile is a separate artifact with an intended namespace
   and LBA allowlist. The kernel compiles with the current driver restrictions,
-  but the profile has not passed boundary tests or device validation. Do not
-  boot it on the iPhone until the documented gates pass.
+  and the predicate passes host-side LBA boundary tests. The full kernel I/O
+  path and device behavior remain unvalidated. Do not boot it on the iPhone
+  until the documented gates pass.
 - Apple firmware and locally extracted device files are not included. Do not
   commit firmware, IPSWs, local configuration, build outputs, or device logs.
 

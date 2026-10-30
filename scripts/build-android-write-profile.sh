@@ -8,6 +8,16 @@ source "$ROOT/scripts/lib/common.sh"
 require_ram_only_ack
 require_android_write_ack
 
+if ! command -v fdtget >/dev/null 2>&1; then
+  bundled_dtc_tools="$BUILD_DIR/host-tools/dtc-1.7.2"
+  if [[ -x "$bundled_dtc_tools/fdtget" ]]; then
+    export PATH="$bundled_dtc_tools:$PATH"
+    if [[ -d "$bundled_dtc_tools/libfdt" ]]; then
+      export LD_LIBRARY_PATH="$bundled_dtc_tools/libfdt${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    fi
+  fi
+fi
+
 need_cmd cpio
 need_cmd fakeroot
 need_cmd fdtget

@@ -70,5 +70,16 @@ It requires `I_ACCEPT_RAM_ONLY=YES`, `I_ACCEPT_INTERNAL_STORAGE_RISK=YES`, and
 RA1NCASTLE_BOOT_PROFILE=android-write ./scripts/ram-boot.sh
 ```
 
-Do not use it on hardware until the driver-side fail-closed range enforcement
-and boundary tests are present.
+The host-side predicate test extracts and compiles the exact LBA-check function
+from the kernel patch. Run it with:
+
+```bash
+./scripts/test-android-write-allowlist.sh
+```
+
+This covers inclusive start/end LBAs, crossing and out-of-range requests,
+namespace mismatch, gaps, multiple ranges, and integer overflow. It does not
+exercise the compiled kernel's full block-I/O path, admin/ioctl routes, or the
+phone's NVMe controller. The artifact can be built and verified on the host,
+but do not boot it on hardware until those remaining paths have been reviewed
+and the profile has passed controlled device validation.
