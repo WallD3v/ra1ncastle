@@ -33,7 +33,7 @@ index 0ade9f2..893909e 100644
 +prebuilt_etc {
 +    name: "modules.load.normal.android",
 +    src: "modules.load.normal.android",
-+    filename: "modules.load.normal",
++    filename: "modules.load.normal.android",
 +    vendor: true,
 +}
 diff --git a/configs/modprobe/modules.load.normal.android b/configs/modprobe/modules.load.normal.android

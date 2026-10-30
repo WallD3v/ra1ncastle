@@ -17,8 +17,15 @@ PATCH="$ROOT/patches/android/0001-n104-system-nvme-modules.patch"
 if grep -Fq 'SNOWCASTLE_NVME_MODULES := nvme-core.ko nvme-apple.ko' "$TREE/BoardConfig.mk" \
   && grep -Fq 'PRODUCT_PACKAGES += modules.load.normal.android' "$TREE/device.mk" \
   && grep -Fq 'name: "modules.load.normal.android"' "$TREE/configs/modprobe/Android.bp" \
+  && grep -Fq 'filename: "modules.load.normal.android"' "$TREE/configs/modprobe/Android.bp" \
   && cmp -s "$TREE/configs/modprobe/modules.load.normal.android" <(printf '%s\n' nvme-core.ko nvme-apple.ko); then
   printf 'Android patch already applied: %s\n' "$(basename "$PATCH")"
+elif grep -Fq 'name: "modules.load.normal.android"' "$TREE/configs/modprobe/Android.bp" \
+  && grep -Fq 'filename: "modules.load.normal"' "$TREE/configs/modprobe/Android.bp"; then
+  sed -i 's/filename: "modules.load.normal"/filename: "modules.load.normal.android"/' \
+    "$TREE/configs/modprobe/Android.bp"
+  printf 'Fixed conflicting Android module install name from %s\n' \
+    "$(basename "$PATCH")"
 elif git -C "$TREE" apply --check "$PATCH" >/dev/null 2>&1; then
   git -C "$TREE" apply "$PATCH"
   printf 'Applied Android patch: %s\n' "$(basename "$PATCH")"
