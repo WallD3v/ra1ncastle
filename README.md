@@ -118,8 +118,11 @@ passing:
 
 `build-all-native.sh` uses a temporary bind mount when the checkout path
 contains spaces, because the legacy kernel build system cannot handle them.
-The mount is removed when the build exits. Build and boot commands should be
-run only after reviewing their script and the relevant safety acknowledgments.
+The mount is removed when the build exits. It runs the complete native build by
+default; to rebuild just the kernel, use
+`./scripts/build-all-native.sh scripts/build-kernel.sh`. The bind mount may
+prompt for `sudo`. Build and boot commands should be run only after reviewing
+their script and the relevant safety acknowledgments.
 
 ## Useful workflows
 

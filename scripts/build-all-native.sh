@@ -3,9 +3,24 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+target="${1:-scripts/build-all.sh}"
+
+if [[ "$#" -gt 1 ]]; then
+  printf 'usage: %s [scripts/build-all.sh|scripts/build-kernel.sh]\n' \
+    "${BASH_SOURCE[0]}" >&2
+  exit 2
+fi
+
+case "$target" in
+  scripts/build-all.sh|scripts/build-kernel.sh) ;;
+  *)
+    printf 'error: unsupported native build target: %s\n' "$target" >&2
+    exit 2
+    ;;
+esac
 
 if [[ "$ROOT" != *[' ':]* ]]; then
-  exec "$ROOT/scripts/build-all.sh"
+  exec "$ROOT/$target"
 fi
 
 need_cmd() {
@@ -34,4 +49,4 @@ trap cleanup EXIT INT TERM
 
 printf 'Temporarily bind-mounting the workspace at %s for the old kernel build system.\n' "$alias_root"
 sudo mount --bind "$ROOT" "$alias_root"
-"$alias_root/scripts/build-all.sh"
+"$alias_root/$target"
