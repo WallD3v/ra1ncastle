@@ -11,6 +11,12 @@ The first Android Recovery boot has now reached Android init and published
 ADB. This recovery profile is RAM-only: the NVMe driver is not staged or
 autoloaded, and no internal partitions are mounted.
 
+On 2026-10-31, the tethered Recovery payload was repackaged using the current
+validated kernel and DTB plus the existing RAM-only Recovery ramdisk. The
+payload verifier passed. A full Soong `recoveryimage` rebuild was not completed;
+the conventional `recovery.img` remains from the earlier build and is not the
+artifact used by the tethered ra1ncastle loader.
+
 The practical estimate is about 70% to an authentic Android recovery/init boot
 with ADB, 55-60% to Android bootanimation, and substantially less to a usable
 GUI. A static logo is not counted as Android boot.
@@ -80,8 +86,10 @@ not enforcement by itself; the driver must consume the contract fail-closed.
 - Gate A: **passed** — recovery reached Android init and publishes ADB.
 - Gate B: fastbootd reports exactly `system`, `vendor`, `metadata`, `userdata`.
 - Gate C: host-side sparse-image expanded sizes fit their target partitions.
-- Gate D: write allowlist tests pass, and a metadata-partition canary readback
-  succeeds without any change to GPT or APFS hashes.
+- Gate D: **partially passed** — host-side tests cover the exact LBA predicate
+  for boundary, namespace, gap, multi-range, and overflow cases. Full block-I/O
+  path validation and a metadata-partition canary readback with unchanged GPT
+  and APFS hashes remain pending.
 - Gate E: flash system/vendor, format metadata/userdata, tether-boot Android.
 
 ## Follow-up TODOs
