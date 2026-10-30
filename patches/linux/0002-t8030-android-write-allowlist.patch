@@ -38,6 +38,17 @@ index 664216e..5c997f8 100644
  		ret = nvme_uring_cmd_io(ctrl, NULL, ioucmd, issue_flags, true);
  		break;
  	default:
+@@ -848,5 +855,10 @@ long nvme_dev_ioctl(struct file *file, unsigned int cmd,
+ 	void __user *argp = (void __user *)arg;
+ 
++	/* Keep admin passthrough and controller reset paths closed. */
++	if ((ctrl->ops->flags & NVME_F_NO_USER_ADMIN_PASSTHRU) &&
++	    cmd != NVME_IOCTL_IO_CMD && cmd != NVME_IOCTL_RESCAN)
++		return -EPERM;
++
+ 	switch (cmd) {
+ 	case NVME_IOCTL_ADMIN_CMD:
+ 		return nvme_user_cmd(ctrl, NULL, argp, 0, open_for_write);
 diff --git a/drivers/nvme/host/apple.c b/drivers/nvme/host/apple.c
 index 739d969..2a0348d 100644
 --- a/drivers/nvme/host/apple.c
