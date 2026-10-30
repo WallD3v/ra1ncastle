@@ -100,3 +100,22 @@ not enforcement by itself; the driver must consume the contract fail-closed.
   build flavor are already `ra1ncastle`). Check Recovery UI/device-name sources
   and update the visible branding without changing the hardware device
   codename required by the iPhone device tree.
+
+## Next host-only milestone: normal Android System images
+
+The next step is to build, but not flash, the normal Android boot, system, and
+vendor images. The Apple NVMe modules must be staged in the boot first-stage
+ramdisk and listed in its `modules.load`; Android first-stage init loads them
+before it mounts `/system` and `/vendor` from NVMe. The ordinary vendor module
+list also contains both modules for the later second-stage init. Recovery keeps
+its existing empty NVMe load list and does not stage either module in its
+Recovery ramdisk.
+
+`scripts/build-android-system.sh` applies the tracked N104 NVMe packaging patch,
+stages the already-built kernel/DTB/modules, and builds `bootimage`,
+`systemimage`, and `vendorimage` for product `ra1ncastle`. It checks the actual
+first-stage ramdisk contents and rejects system/vendor images larger than the
+captured p2/p3 partition sizes. This is a host build only; it does not write to
+the phone. The build is not yet a flash/boot instruction: userdata formatting,
+firmware availability, system image payload packaging, and the write-profile
+validation gates remain separate work.

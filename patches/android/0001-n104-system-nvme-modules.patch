@@ -1,0 +1,66 @@
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 95be2e4..4ad52ef 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -118,6 +118,18 @@ BOOT_KERNEL_MODULES :=
+ RECOVERY_KERNEL_MODULES :=
+ TARGET_AUTO_COLLECT_KERNEL_MODULE_DEPS := true
+ 
++# The RAM-only Recovery product keeps NVMe unloaded. A full Android System
++# build uses the same validated modules, but loads them from vendor ramdisk
++# before first-stage init mounts system/vendor from the internal NVMe disk.
++ifneq ($(SNOWCASTLE_RAMONLY_RECOVERY),true)
++SNOWCASTLE_NVME_MODULES := nvme-core.ko nvme-apple.ko
++BOOT_KERNEL_MODULES += $(SNOWCASTLE_NVME_MODULES)
++BOARD_VENDOR_RAMDISK_KERNEL_MODULES := \
++    $(addprefix $(SNOWCASTLE_RAMONLY_KERNEL_DIR)/,$(SNOWCASTLE_NVME_MODULES))
++BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(SNOWCASTLE_NVME_MODULES)
++BOARD_VENDOR_KERNEL_MODULES_LOAD := $(SNOWCASTLE_NVME_MODULES)
++endif
++
+ # The external APFS-RW module is only needed for the APFS image scheme.
+ # Do not require or load it for normal partitions or RAM-only recovery.
+ ifeq ($(SNOWCASTLE_PARTITION_SCHEME),apfs)
+diff --git a/configs/modprobe/Android.bp b/configs/modprobe/Android.bp
+index 0ade9f2..893909e 100644
+--- a/configs/modprobe/Android.bp
++++ b/configs/modprobe/Android.bp
+@@ -9,3 +9,10 @@ prebuilt_etc {
+     recovery_available: true,
+     vendor: true,
+ }
++
++prebuilt_etc {
++    name: "modules.load.normal.android",
++    src: "modules.load.normal.android",
++    filename: "modules.load.normal",
++    vendor: true,
++}
+diff --git a/configs/modprobe/modules.load.normal.android b/configs/modprobe/modules.load.normal.android
+new file mode 100644
+index 0000000..34dac15
+--- /dev/null
++++ b/configs/modprobe/modules.load.normal.android
+@@ -0,0 +1,2 @@
++nvme-core.ko
++nvme-apple.ko
+diff --git a/device.mk b/device.mk
+index cb4db10..621f09a 100644
+--- a/device.mk
++++ b/device.mk
+@@ -135,9 +135,12 @@ PRODUCT_COPY_FILES += \
+     $(DEVICE_PATH)/configs/modprobe/modules.blocklist:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.blocklist
+ endif
+ 
+-PRODUCT_PACKAGES += \
+-    modules.load.normal \
+-    modules.load.normal.recovery
++ifeq ($(SNOWCASTLE_RAMONLY_RECOVERY),true)
++PRODUCT_PACKAGES += modules.load.normal
++else
++PRODUCT_PACKAGES += modules.load.normal.android
++endif
++PRODUCT_PACKAGES += modules.load.normal.recovery
+ 
+ PRODUCT_PACKAGES += \
+     modprobe_kernel

@@ -9,6 +9,8 @@ PREBUILT_DIR="$TREE/device/apple/snowcastle/prebuilts/kernel"
 KERNEL_SOURCE_LINK="$TREE/device/apple/snowcastle/kernel-source"
 KERNEL_SOURCE_TREE="$ROOT/sources/linux"
 
+"$ROOT/scripts/apply-android-patches.sh"
+
 [[ -d "$KERNEL_SOURCE_TREE" ]] || {
   printf 'error: missing kernel source tree: %s\n' "$KERNEL_SOURCE_TREE" >&2
   exit 1
@@ -22,7 +24,7 @@ else
   ln -s "$KERNEL_SOURCE_TREE" "$KERNEL_SOURCE_LINK"
 fi
 
-for input in Image.gz t8030-n104.dtb config; do
+for input in Image.gz t8030-n104.dtb config nvme-core.ko nvme-apple.ko; do
   [[ -s "$KERNEL_OUT/$input" ]] || {
     printf 'error: missing validated kernel input: %s\n' "$KERNEL_OUT/$input" >&2
     exit 1
@@ -61,9 +63,11 @@ grep -q '^CONFIG_DEFAULT_SECURITY_SELINUX=y$' "$KERNEL_OUT/config" || {
 mkdir -p "$PREBUILT_DIR"
 install -m 0644 "$KERNEL_OUT/Image.gz" "$PREBUILT_DIR/Image.gz"
 install -m 0644 "$KERNEL_OUT/t8030-n104.dtb" "$PREBUILT_DIR/t8030-n104.dtb"
+install -m 0644 "$KERNEL_OUT/nvme-core.ko" "$PREBUILT_DIR/nvme-core.ko"
+install -m 0644 "$KERNEL_OUT/nvme-apple.ko" "$PREBUILT_DIR/nvme-apple.ko"
 (
   cd "$PREBUILT_DIR"
-  sha256sum Image.gz t8030-n104.dtb >SHA256SUMS
+  sha256sum Image.gz t8030-n104.dtb nvme-core.ko nvme-apple.ko >SHA256SUMS
 )
 
 [[ -x "$TREE/.repo/repo/repo" ]] || {
