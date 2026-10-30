@@ -88,9 +88,9 @@ not enforcement by itself; the driver must consume the contract fail-closed.
 - Gate C: host-side sparse-image expanded sizes fit their target partitions.
 - Gate D: **partially passed** — host-side tests cover the exact LBA and I/O
   policy functions for boundary, namespace, gap, multi-range, overflow, flush,
-  and unsupported-opcode cases. Full block-I/O path validation and a
-  metadata-partition canary readback with unchanged GPT and APFS hashes remain
-  pending.
+  and unsupported-opcode cases, plus valid and malformed DTB allowlist
+  properties. Full block-I/O path validation and a metadata-partition canary
+  readback with unchanged GPT and APFS hashes remain pending.
 - Gate E: flash system/vendor, format metadata/userdata, tether-boot Android.
 
 ## Follow-up TODOs

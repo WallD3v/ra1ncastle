@@ -70,8 +70,8 @@ It requires `I_ACCEPT_RAM_ONLY=YES`, `I_ACCEPT_INTERNAL_STORAGE_RISK=YES`, and
 RA1NCASTLE_BOOT_PROFILE=android-write ./scripts/ram-boot.sh
 ```
 
-The host-side test extracts and compiles the exact LBA-check and I/O-policy
-functions from the kernel patch. Run it with:
+The host-side test extracts and compiles the exact LBA-check, I/O-policy, and
+DTB allowlist-parser functions from the kernel patch. Run it with:
 
 ```bash
 ./scripts/test-android-write-allowlist.sh
@@ -80,8 +80,11 @@ functions from the kernel patch. Run it with:
 This covers inclusive start/end LBAs, crossing and out-of-range requests,
 namespace mismatch, gaps, multiple ranges, integer overflow, flush namespace
 checks, and rejection of dataset-management, write-zeroes, and unknown I/O
-opcodes. It does not exercise the compiled kernel's full block-I/O path,
-admin/ioctl routes, or the phone's NVMe controller. The artifact can be built
-and verified on the host, but do not boot it on hardware until those remaining
-paths have been reviewed and the profile has passed controlled device
-validation.
+opcodes. Parser cases cover valid and maximum-size contracts, absent or
+malformed properties, invalid NSIDs/ranges, excess ranges, and FDT read errors.
+Static checks also confirm the patch contains the controller admin/reset gates
+and the non-admin queue hook. The suite does not execute the compiled kernel's
+block-I/O path, ioctl/io_uring routes, or the phone's NVMe controller. The
+artifact can be built and verified on the host, but do not boot it on hardware
+until those remaining paths have been reviewed and the profile has passed
+controlled device validation.
