@@ -3,6 +3,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Android's soong_ui launcher does not quote TOP paths. Re-enter this source
+# tree through a no-space bind mount in a private user/mount namespace.
+if [[ "$ROOT" == *" "* && "${RA1NCASTLE_BUILD_PATH_ALIAS:-}" != YES ]]; then
+  command -v unshare >/dev/null 2>&1 || {
+    echo 'error: Android build path contains spaces and unshare is unavailable' >&2
+    exit 1
+  }
+  alias_root="/tmp/ra1ncastle-build-${UID}"
+  mkdir -p "$alias_root"
+  exec unshare -Urnm bash -c '
+    set -euo pipefail
+    mount --bind "$1" "$2"
+    export RA1NCASTLE_BUILD_PATH_ALIAS=YES
+    cd "$2"
+    exec "$2/scripts/$3"
+  ' _ "$ROOT" "$alias_root" "$(basename "${BASH_SOURCE[0]}")"
+fi
 TREE="$ROOT/android/lineage-24.0"
 KERNEL_OUT="$ROOT/out/kernel"
 PREBUILT_DIR="$TREE/device/apple/snowcastle/prebuilts/kernel"
