@@ -71,7 +71,15 @@ export SNOWCASTLE_RAMONLY_RECOVERY=false
 unset INLINE_KERNEL_BUILDING
 # The normal boot ramdisk must contain/load NVMe before first-stage mount_all;
 # system/vendor are built independently and checked against the captured GPT.
-build/soong/soong_ui.bash --make-mode bootimage systemimage vendorimage
+build_args=()
+if [[ -n "${RA1NCASTLE_BUILD_JOBS:-}" ]]; then
+  [[ "$RA1NCASTLE_BUILD_JOBS" =~ ^[1-9][0-9]*$ ]] || {
+    echo 'error: RA1NCASTLE_BUILD_JOBS must be a positive integer' >&2
+    exit 1
+  }
+  build_args+=("-j$RA1NCASTLE_BUILD_JOBS")
+fi
+build/soong/soong_ui.bash --make-mode "${build_args[@]}" bootimage systemimage vendorimage
 
 for image in boot.img system.img vendor.img; do
   [[ -s "$PRODUCT_OUT/$image" ]] || {
