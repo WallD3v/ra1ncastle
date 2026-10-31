@@ -52,7 +52,12 @@ for input in Image.gz t8030-n104.dtb nvme-core.ko nvme-apple.ko; do
 done
 (
   cd "$PREBUILT_DIR"
-  sha256sum Image.gz t8030-n104.dtb nvme-core.ko nvme-apple.ko >SHA256SUMS
+  sha_tmp="$(mktemp .SHA256SUMS.XXXXXX)"
+  trap 'rm -f "$sha_tmp"' EXIT
+  sha256sum Image.gz t8030-n104.dtb nvme-core.ko nvme-apple.ko >"$sha_tmp"
+  if ! cmp -s "$sha_tmp" SHA256SUMS; then
+    mv -f "$sha_tmp" SHA256SUMS
+  fi
   sha256sum --check SHA256SUMS
 )
 
