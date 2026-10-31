@@ -46,7 +46,9 @@ grep -qx 'CONFIG_NVME_APPLE=m' "$KERNEL_OUT/config" || {
 
 mkdir -p "$PREBUILT_DIR"
 for input in Image.gz t8030-n104.dtb nvme-core.ko nvme-apple.ko; do
-  install -m 0644 "$KERNEL_OUT/$input" "$PREBUILT_DIR/$input"
+  if ! cmp -s "$KERNEL_OUT/$input" "$PREBUILT_DIR/$input"; then
+    install -m 0644 "$KERNEL_OUT/$input" "$PREBUILT_DIR/$input"
+  fi
 done
 (
   cd "$PREBUILT_DIR"
